@@ -17,6 +17,11 @@ class AuthenticationTest extends TestCase
         $this->get('/')->assertRedirect('/login');
     }
 
+    public function test_login_page_renders_with_the_built_stylesheets(): void
+    {
+        $this->get('/login')->assertOk()->assertSee('Selamat datang');
+    }
+
     public function test_user_can_log_in_and_view_dashboard(): void
     {
         $role = Role::create(['name' => 'admin', 'label' => 'Admin']);
