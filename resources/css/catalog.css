@@ -1,0 +1,57 @@
+@tailwind components;
+
+@layer components {
+    .catalog-panel { @apply rounded-xl border border-neutral-200 bg-white p-4 sm:p-5; }
+    .catalog-panel-heading { @apply mb-4 flex items-start justify-between gap-3 border-b border-neutral-100 pb-4; }
+    .catalog-panel-heading h2 { @apply text-sm font-semibold text-neutral-900; }
+    .catalog-panel-heading p { @apply mt-1 text-xs text-neutral-500; }
+    .catalog-form { @apply flex flex-col gap-4; }
+    .catalog-form label { @apply flex flex-col gap-1.5 text-xs font-medium text-neutral-700; }
+    .catalog-form input:not([type=checkbox]), .catalog-form select, .catalog-form textarea, .catalog-input { @apply min-h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-normal text-neutral-900 outline-none transition focus:border-neutral-800 focus:ring-2 focus:ring-neutral-200; }
+    .catalog-form label small, .catalog-error { @apply text-xs font-normal text-red-700; }
+    .catalog-form input[type=checkbox] { @apply size-4 accent-neutral-900; }
+    .catalog-table { @apply w-full min-w-[650px] border-collapse text-left text-xs; }
+    .catalog-table th { @apply border-b border-neutral-200 px-3 py-3 font-semibold uppercase tracking-wide text-neutral-500; }
+    .catalog-table td { @apply border-b border-neutral-100 px-3 py-3 align-top text-neutral-700; }
+    .catalog-table tr:last-child td { @apply border-0; }
+    .button-primary { @apply inline-flex min-h-10 items-center justify-center rounded-lg bg-neutral-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50; }
+    .button-secondary { @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-800 transition hover:bg-neutral-100; }
+    .button-danger { @apply inline-flex min-h-10 items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-600 transition hover:border-neutral-500 hover:text-neutral-950; }
+    .button-small { @apply min-h-8 px-2.5 py-1.5; }
+    .catalog-tag { @apply rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-1 text-[10px] text-neutral-600; }
+    .catalog-status { @apply inline-flex rounded-full border px-2 py-1 text-[10px] font-medium; }
+    .catalog-status-on { @apply border-neutral-300 bg-neutral-100 text-neutral-800; }
+    .catalog-status-off { @apply border-neutral-200 bg-white text-neutral-500; }
+    .catalog-modal-backdrop { @apply fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:p-8; }
+    .catalog-modal { @apply my-auto w-full max-w-3xl rounded-xl border border-neutral-200 bg-white p-4 shadow-2xl sm:p-6; }
+    .module-link { @apply text-left no-underline transition hover:border-neutral-400 hover:shadow-sm; }
+    .module-arrow { @apply ml-auto text-lg text-neutral-400; }
+}
+
+.sidebar { background: #151515; border-color: #292929; color: #fff; }
+.brand { color: #fff; }
+.brand-mark { background: #fff; color: #111; }
+.brand small, .nav-caption { color: #a3a3a3; }
+.nav-item { color: #c4c4c4; }
+.nav-item > span { color: #a3a3a3; }
+.nav-item.active { background: #fff; color: #111; }
+.nav-item.active > span { color: #111; }
+.nav-item.muted { color: #777; }
+.sidebar-bottom { border-color: #333; }
+.avatar { background: #fff; color: #111; }
+.user-chip small, .logout { color: #aaa; }
+.logout:hover { color: #fff; }
+.status-dot { background: #111; }
+.notice-card { background: #f2f2f2; border-color: #e2e2e2; }
+.notice-icon { border-color: #999; color: #222; }
+.notice-card strong { color: #222; }
+.notice-card p { color: #555; }
+.module-icon.green, .module-icon.blue, .module-icon.amber, .module-icon.violet { background: #f0f0f0; color: #222; }
+.bottom-note > span { color: #555; }
+.login-page { background: #f2f2f2; }
+.login-card > .eyebrow { color: #444; }
+.login-form input:focus { border-color: #111; box-shadow: 0 0 0 3px #11111118; }
+.remember input { accent-color: #111; }
+.primary-button { background: #111; }
+.primary-button:hover { background: #333; }
+.period-pill { color: #222; }

@@ -1,0 +1,8 @@
+@extends('layouts.app')
+@section('content')
+<div class="welcome-row"><div><h2>Ringkasan toko</h2><p>Kelola katalog barang dan siapkan data sebelum transaksi mulai dicatat.</p></div><span class="period-pill">{{ now()->timezone('Asia/Jakarta')->translatedFormat('d F Y') }}</span></div>
+<div class="notice-card"><span class="notice-icon">i</span><div><strong>Master data siap dikelola</strong><p>Kategori, satuan, barang, dan atribut spesifikasi sekarang tersimpan di database. Stok dan transaksi akan dihubungkan pada tahap berikutnya.</p></div></div>
+<div class="section-heading"><div><h2>Kelola katalog</h2><p>Mulai dengan kategori dan satuan, lalu masukkan produk toko.</p></div></div>
+<div class="module-grid">@if(auth()->user()->hasPermission('catalog.manage'))<a class="module-card module-link" href="{{ route('categories.index') }}"><span class="module-icon green">▧</span><div><h3>Kategori & spesifikasi</h3><p>Atur kelompok barang dan atributnya</p></div><span class="module-arrow">→</span></a><a class="module-card module-link" href="{{ route('units.index') }}"><span class="module-icon blue">◫</span><div><h3>Satuan</h3><p>Atur satuan dan presisi kuantitas</p></div><span class="module-arrow">→</span></a>@endif @if(auth()->user()->hasPermission('catalog.view'))<a class="module-card module-link" href="{{ route('products.index') }}"><span class="module-icon amber">▤</span><div><h3>Barang</h3><p>Kelola harga, barcode, dan spesifikasi</p></div><span class="module-arrow">→</span></a>@endif</div>
+<div class="bottom-note"><span>⌁</span><div><strong>Perubahan katalog terlindungi</strong><p>Penambahan dan perubahan barang hanya dapat dilakukan pengguna dengan izin katalog yang sesuai.</p></div></div>
+@endsection
