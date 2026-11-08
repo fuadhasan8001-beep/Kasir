@@ -4,6 +4,7 @@ namespace App\Livewire\Products;
 
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\InventoryLevel;
 use App\Models\Product;
 use App\Models\ProductSpecification;
 use App\Models\ProductSpecificationValue;
@@ -188,6 +189,10 @@ class ManageProducts extends Component
                 : new Product;
 
             $product->fill($attributes)->save();
+            InventoryLevel::firstOrCreate(
+                ['product_id' => $product->id, 'inventory_type' => 'finished'],
+                ['quantity' => 0],
+            );
             $product->units()->sync([$product->unit_id => ['conversion_factor' => '1.000000', 'is_base' => true]]);
 
             $product->specificationValues()->delete();

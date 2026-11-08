@@ -25,8 +25,8 @@ class RolePermissionSeeder extends Seeder
 
         $grants = [
             'admin' => $permissions->keys()->all(),
-            'kasir' => ['dashboard.view', 'sales.create', 'catalog.view'],
-            'pemilik' => ['dashboard.view', 'sales.view_all', 'reports.view', 'finance.manage', 'catalog.view'],
+            'kasir' => ['dashboard.view', 'sales.create', 'catalog.view', 'inventory.manage'],
+            'pemilik' => $permissions->keys()->all(),
         ];
 
         foreach ($grants as $name => $allowed) {
