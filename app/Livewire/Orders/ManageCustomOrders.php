@@ -75,13 +75,11 @@ class ManageCustomOrders extends Component
 
     public function boot(): void
     {
-        abort_unless(auth()->user()?->hasPermission('sales.create'), 403);
+        abort_unless(auth()->check(), 403);
     }
 
     public function createOrder(): void
     {
-        abort_unless(auth()->user()?->hasPermission('sales.create'), 403);
-
         $validated = $this->validate([
             'customerName' => ['required', 'string', 'max:160'],
             'customerPhone' => ['nullable', 'string', 'max:40'],
@@ -180,8 +178,6 @@ class ManageCustomOrders extends Component
 
     public function recordPayment(int $orderId): void
     {
-        abort_unless(auth()->user()?->hasPermission('sales.create'), 403);
-
         $validated = $this->validate([
             'paymentAmount' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
             'paymentMethod' => ['required', Rule::in(['cash', 'bank_transfer', 'qris'])],

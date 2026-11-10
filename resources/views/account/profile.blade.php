@@ -18,7 +18,7 @@
                 <span class="grid size-14 place-items-center rounded-full bg-neutral-100 text-xl font-semibold text-neutral-800">{{ strtoupper(substr($user->name, 0, 1)) }}</span>
                 <div>
                     <h2 class="text-base font-semibold text-neutral-900">{{ $user->name }}</h2>
-                    <p class="mt-1 text-sm text-neutral-500">{{ $user->role?->label ?? 'Pengguna' }}</p>
+                    <p class="mt-1 text-sm text-neutral-500">Admin (Kasir)</p>
                 </div>
             </div>
             <dl class="mt-5 grid gap-3 border-t border-neutral-100 pt-4 text-sm">

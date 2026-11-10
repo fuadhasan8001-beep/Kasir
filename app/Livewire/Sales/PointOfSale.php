@@ -52,7 +52,7 @@ class PointOfSale extends Component
 
     public function boot(): void
     {
-        abort_unless(auth()->user()?->hasPermission('sales.create'), 403);
+        abort_unless(auth()->check(), 403);
     }
 
     public function addItem(): void
@@ -114,8 +114,6 @@ class PointOfSale extends Component
 
     public function checkout(): void
     {
-        abort_unless(auth()->user()?->hasPermission('sales.create'), 403);
-
         if ($this->cart === []) {
             $this->addError('cart', 'Tambahkan minimal satu barang ke transaksi.');
 
@@ -128,10 +126,6 @@ class PointOfSale extends Component
             'amountReceived' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'checkoutToken' => ['required', 'uuid'],
         ]);
-
-        if ((float) $validated['discount'] > 0) {
-            abort_unless(auth()->user()?->hasPermission('finance.manage'), 403);
-        }
 
         $this->validate([
             'cart' => ['required', 'array', 'min:1'],

@@ -44,7 +44,7 @@
             </div>
             <div class="checkout-summary">
                 <div><span>Subtotal</span><strong>Rp {{ number_format($subtotal, 0, ',', '.') }}</strong></div>
-                @if(auth()->user()->hasPermission('finance.manage'))<label>Diskon (Rp)<input class="catalog-input" type="number" min="0" step="100" wire:model.live="discount">@error('discount')<small class="catalog-error">{{ $message }}</small>@enderror</label>@endif
+                <label>Diskon (Rp)<input class="catalog-input" type="number" min="0" step="100" wire:model.live="discount">@error('discount')<small class="catalog-error">{{ $message }}</small>@enderror</label>
                 <div class="grand-total"><span>Total bayar</span><strong>Rp {{ number_format($total, 0, ',', '.') }}</strong></div>
                 <label>Metode pembayaran<select wire:model="paymentMethod"><option value="cash">Tunai</option><option value="bank_transfer">Transfer bank</option><option value="qris">QRIS</option></select></label>
                 <label>Uang diterima<input class="catalog-input" type="number" min="0" step="100" wire:model="amountReceived" placeholder="Masukkan nominal diterima">@error('amountReceived')<small class="catalog-error">{{ $message }}</small>@enderror</label>

@@ -33,10 +33,7 @@ class TransactionHistory extends Component
 
     public function boot(): void
     {
-        abort_unless(
-            auth()->user()?->hasPermission('sales.view_all') || auth()->user()?->hasPermission('sales.create'),
-            403,
-        );
+        abort_unless(auth()->check(), 403);
     }
 
     public function toggleDetails(int $saleId): void
@@ -46,19 +43,15 @@ class TransactionHistory extends Component
 
     public function render(): View
     {
-        $canViewAll = auth()->user()?->hasPermission('sales.view_all') ?? false;
-
         return view('livewire.sales.transaction-history', [
             'sales' => Sale::query()
                 ->with(['user', 'items'])
-                ->when(! $canViewAll, fn ($query) => $query->where('user_id', auth()->id()))
                 ->when($this->dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $this->dateFrom))
                 ->when($this->dateTo, fn ($query) => $query->whereDate('created_at', '<=', $this->dateTo))
                 ->when($this->search, fn ($query) => $query->where('invoice_number', 'like', '%'.$this->search.'%'))
                 ->latest()
                 ->paginate(15),
-            'canViewAll' => $canViewAll,
-            'canViewProfit' => auth()->user()?->hasPermission('reports.view') ?? false,
+            'canViewProfit' => true,
         ]);
     }
 }

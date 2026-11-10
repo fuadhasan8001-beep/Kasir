@@ -30,13 +30,11 @@ class ManageInventory extends Component
 
     public function boot(): void
     {
-        abort_unless(auth()->user()?->hasPermission('inventory.manage'), 403);
+        abort_unless(auth()->check(), 403);
     }
 
     public function saveMovement(): void
     {
-        abort_unless(auth()->user()?->hasPermission('inventory.manage'), 403);
-
         $validated = $this->validate([
             'productId' => ['required', 'integer', 'exists:products,id'],
             'movementType' => ['required', Rule::in(['in', 'out', 'adjustment'])],

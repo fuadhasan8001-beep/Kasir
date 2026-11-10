@@ -26,13 +26,11 @@ class ManageExpenses extends Component
 
     public function boot(): void
     {
-        abort_unless(auth()->user()?->hasPermission('finance.manage'), 403);
+        abort_unless(auth()->check(), 403);
     }
 
     public function save(): void
     {
-        abort_unless(auth()->user()?->hasPermission('finance.manage'), 403);
-
         $validated = $this->validate([
             'category' => ['required', 'string', 'max:80'],
             'description' => ['required', 'string', 'max:180'],
@@ -59,7 +57,6 @@ class ManageExpenses extends Component
 
     public function delete(Expense $expense): void
     {
-        abort_unless(auth()->user()?->hasPermission('finance.manage'), 403);
         $expense->delete();
         session()->flash('status', 'Catatan pengeluaran dihapus.');
     }

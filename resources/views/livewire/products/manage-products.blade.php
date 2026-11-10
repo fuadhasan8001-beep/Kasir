@@ -3,13 +3,13 @@
     <div class="catalog-panel">
         <div class="flex flex-wrap items-center justify-between gap-4">
             <div><h2 class="text-base font-semibold text-neutral-900">Katalog barang</h2><p class="mt-1 text-xs text-neutral-500">Data barang, satuan, harga, dan spesifikasi per kategori.</p></div>
-            @if ($canManage)<button class="button-primary" wire:click="create" type="button">+ Barang baru</button>@endif
+            <button class="button-primary" wire:click="create" type="button">+ Barang baru</button>
         </div>
         <div class="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
             <input class="catalog-input" wire:model.live.debounce.300ms="search" type="search" placeholder="Cari nama, SKU, atau barcode...">
             <select class="catalog-input" wire:model.live="categoryFilter"><option value="">Semua kategori</option>@foreach($categories as $category)<option value="{{ $category->id }}">{{ $category->name }}</option>@endforeach</select>
         </div>
-        <div class="mt-5 overflow-x-auto"><table class="catalog-table"><thead><tr><th>Barang</th><th>Kategori</th><th>Harga</th><th>Satuan</th><th>Status</th>@if($canManage)<th class="text-right">Tindakan</th>@endif</tr></thead><tbody>
+        <div class="mt-5 overflow-x-auto"><table class="catalog-table"><thead><tr><th>Barang</th><th>Kategori</th><th>Harga</th><th>Satuan</th><th>Status</th><th class="text-right">Tindakan</th></tr></thead><tbody>
             @forelse ($products as $product)
                 <tr wire:key="product-{{ $product->id }}">
                     <td><div class="font-medium text-neutral-900">{{ $product->name }}</div><div class="mt-1 text-xs text-neutral-500">{{ $product->sku }}@if($product->barcode) · {{ $product->barcode }}@endif</div>@if($product->brand)<div class="mt-1 text-xs text-neutral-500">{{ $product->brand->name }}</div>@endif
@@ -19,10 +19,10 @@
                     <td><div>Beli Rp{{ number_format((float) $product->purchase_price, 0, ',', '.') }}</div><div class="text-xs text-neutral-500">Jual Rp{{ number_format((float) $product->selling_price, 0, ',', '.') }}</div></td>
                     <td>{{ $product->unit->name }} <span class="text-xs text-neutral-500">({{ $product->unit->abbreviation }})</span></td>
                     <td><span class="catalog-status {{ $product->is_active ? 'catalog-status-on' : 'catalog-status-off' }}">{{ $product->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
-                    @if($canManage)<td><div class="flex justify-end gap-2"><button class="button-secondary button-small" wire:click="edit({{ $product->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="delete({{ $product->id }})" wire:confirm="Arsipkan barang {{ $product->name }}?" type="button">Arsip</button></div></td>@endif
+                    <td><div class="flex justify-end gap-2"><button class="button-secondary button-small" wire:click="edit({{ $product->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="delete({{ $product->id }})" wire:confirm="Arsipkan barang {{ $product->name }}?" type="button">Arsip</button></div></td>
                 </tr>
             @empty
-                <tr><td colspan="{{ $canManage ? 6 : 5 }}" class="py-10 text-center text-neutral-500">Tidak ada barang yang cocok dengan pencarian.</td></tr>
+                <tr><td colspan="6" class="py-10 text-center text-neutral-500">Tidak ada barang yang cocok dengan pencarian.</td></tr>
             @endforelse
         </tbody></table></div>
         <div class="mt-4">{{ $products->links() }}</div>

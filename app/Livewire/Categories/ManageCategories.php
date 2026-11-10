@@ -39,7 +39,7 @@ class ManageCategories extends Component
 
     public function boot(): void
     {
-        $this->requireCatalogManagePermission();
+        abort_unless(auth()->check(), 403);
     }
 
     public function updatedSearch(): void
@@ -49,7 +49,6 @@ class ManageCategories extends Component
 
     public function editCategory(Category $category): void
     {
-        $this->requireCatalogManagePermission();
         $this->editingCategoryId = $category->id;
         $this->name = $category->name;
         $this->description = $category->description ?? '';
@@ -57,7 +56,6 @@ class ManageCategories extends Component
 
     public function saveCategory(): void
     {
-        $this->requireCatalogManagePermission();
 
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:120', Rule::unique('categories', 'name')->ignore($this->editingCategoryId)],
@@ -89,7 +87,6 @@ class ManageCategories extends Component
 
     public function deleteCategory(Category $category): void
     {
-        $this->requireCatalogManagePermission();
 
         if (Product::withTrashed()->where('category_id', $category->id)->exists() || $category->specifications()->exists()) {
             throw ValidationException::withMessages(['category' => 'Kategori yang sudah dipakai produk atau spesifikasi tidak dapat dihapus.']);
@@ -107,7 +104,6 @@ class ManageCategories extends Component
 
     public function editSpecification(ProductSpecification $specification): void
     {
-        $this->requireCatalogManagePermission();
         $this->specificationCategoryId = $specification->category_id;
         $this->editingSpecificationId = $specification->id;
         $this->specificationName = $specification->name;
@@ -119,7 +115,6 @@ class ManageCategories extends Component
 
     public function saveSpecification(): void
     {
-        $this->requireCatalogManagePermission();
         $this->specificationKey = Str::snake($this->specificationKey ?: $this->specificationName);
 
         $validated = $this->validate([
@@ -162,7 +157,6 @@ class ManageCategories extends Component
 
     public function deleteSpecification(ProductSpecification $specification): void
     {
-        $this->requireCatalogManagePermission();
 
         if ($specification->values()->exists()) {
             throw ValidationException::withMessages(['specification' => 'Spesifikasi yang sudah dipakai produk tidak dapat dihapus.']);
@@ -180,11 +174,6 @@ class ManageCategories extends Component
     public function cancelSpecificationEdit(): void
     {
         $this->resetSpecificationForm();
-    }
-
-    private function requireCatalogManagePermission(): void
-    {
-        abort_unless(auth()->user()?->hasPermission('catalog.manage'), 403);
     }
 
     private function resetCategoryForm(): void
@@ -213,7 +202,6 @@ class ManageCategories extends Component
             'selectedCategory' => $this->specificationCategoryId
                 ? Category::with('specifications')->find($this->specificationCategoryId)
                 : null,
-            'canManage' => auth()->user()?->hasPermission('catalog.manage') ?? false,
         ]);
     }
 }

@@ -24,7 +24,7 @@ class ManageUnits extends Component
 
     public function boot(): void
     {
-        $this->requireCatalogManagePermission();
+        abort_unless(auth()->check(), 403);
     }
 
     public function updatedSearch(): void
@@ -34,7 +34,6 @@ class ManageUnits extends Component
 
     public function edit(Unit $unit): void
     {
-        $this->requireCatalogManagePermission();
         $this->editingUnitId = $unit->id;
         $this->name = $unit->name;
         $this->abbreviation = $unit->abbreviation;
@@ -43,7 +42,6 @@ class ManageUnits extends Component
 
     public function save(): void
     {
-        $this->requireCatalogManagePermission();
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:80', Rule::unique('units', 'name')->ignore($this->editingUnitId)],
             'abbreviation' => ['required', 'string', 'max:16', Rule::unique('units', 'abbreviation')->ignore($this->editingUnitId)],
@@ -70,7 +68,6 @@ class ManageUnits extends Component
 
     public function delete(Unit $unit): void
     {
-        $this->requireCatalogManagePermission();
 
         if (Product::withTrashed()->where('unit_id', $unit->id)->exists() || $unit->productUnits()->exists()) {
             $unit->update(['is_active' => false]);
@@ -86,11 +83,6 @@ class ManageUnits extends Component
     public function cancelEdit(): void
     {
         $this->resetForm();
-    }
-
-    private function requireCatalogManagePermission(): void
-    {
-        abort_unless(auth()->user()?->hasPermission('catalog.manage'), 403);
     }
 
     private function resetForm(): void

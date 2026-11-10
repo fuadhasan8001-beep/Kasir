@@ -58,7 +58,7 @@ class ManageProducts extends Component
 
     public function boot(): void
     {
-        abort_unless(auth()->user()?->hasPermission('catalog.view'), 403);
+        abort_unless(auth()->check(), 403);
     }
 
     public function updatedSearch(): void
@@ -78,14 +78,12 @@ class ManageProducts extends Component
 
     public function create(): void
     {
-        $this->requireCatalogManagePermission();
         $this->resetForm();
         $this->showForm = true;
     }
 
     public function edit(Product $product): void
     {
-        $this->requireCatalogManagePermission();
         $product->load('specificationValues');
 
         $this->editingProductId = $product->id;
@@ -108,7 +106,6 @@ class ManageProducts extends Component
 
     public function save(): void
     {
-        $this->requireCatalogManagePermission();
 
         $rules = [
             'sku' => ['required', 'string', 'max:80', Rule::unique('products', 'sku')->ignore($this->editingProductId)],
@@ -216,7 +213,6 @@ class ManageProducts extends Component
 
     public function delete(Product $product): void
     {
-        $this->requireCatalogManagePermission();
         $product->delete();
         session()->flash('status', 'Barang diarsipkan dan tidak lagi muncul di katalog aktif.');
     }
@@ -224,11 +220,6 @@ class ManageProducts extends Component
     public function cancel(): void
     {
         $this->resetForm();
-    }
-
-    private function requireCatalogManagePermission(): void
-    {
-        abort_unless(auth()->user()?->hasPermission('catalog.manage'), 403);
     }
 
     private function resetForm(): void
@@ -270,7 +261,6 @@ class ManageProducts extends Component
             'specifications' => $this->categoryId
                 ? ProductSpecification::where('category_id', $this->categoryId)->orderBy('sort_order')->get()
                 : collect(),
-            'canManage' => auth()->user()?->hasPermission('catalog.manage') ?? false,
         ]);
     }
 }

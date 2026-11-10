@@ -2,10 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -24,8 +22,7 @@ class AuthenticationTest extends TestCase
 
     public function test_user_can_log_in_and_view_dashboard(): void
     {
-        $role = Role::create(['name' => 'admin', 'label' => 'Admin']);
-        $user = User::factory()->create(['role_id' => $role->id, 'password' => 'secret-password']);
+        $user = User::factory()->create(['password' => 'secret-password']);
 
         $this->post('/login', ['email' => $user->email, 'password' => 'secret-password'])
             ->assertRedirect(route('dashboard'));
@@ -39,14 +36,20 @@ class AuthenticationTest extends TestCase
             ->assertRedirect('/login')->assertSessionHasErrors('email');
     }
 
-    public function test_permission_middleware_rejects_users_without_the_permission(): void
+    public function test_authenticated_admin_can_access_all_operational_areas(): void
     {
-        $role = Role::create(['name' => 'kasir', 'label' => 'Kasir']);
-        $user = User::factory()->create(['role_id' => $role->id]);
+        $user = User::factory()->create();
 
-        Route::middleware(['web', 'auth', 'permission:inventory.manage'])
-            ->get('/permission-probe', fn () => response('allowed'));
+        $this->actingAs($user);
 
-        $this->actingAs($user)->get('/permission-probe')->assertForbidden();
+        foreach (['dashboard', 'sales.create', 'orders.custom', 'sales.index', 'inventory.index', 'expenses.index', 'products.index', 'categories.index', 'units.index', 'profile.edit'] as $route) {
+            $this->get(route($route))->assertOk();
+        }
+
+        $this->get(route('dashboard'))
+            ->assertSee('Admin (Kasir)')
+            ->assertSee('Pesanan custom')
+            ->assertSee('Inventaris')
+            ->assertDontSee('Kelola kasir');
     }
 }

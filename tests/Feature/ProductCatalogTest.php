@@ -8,10 +8,8 @@ use App\Livewire\Units\ManageUnits;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductSpecification;
-use App\Models\Role;
 use App\Models\Unit;
 use App\Models\User;
-use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -22,8 +20,7 @@ class ProductCatalogTest extends TestCase
 
     public function test_admin_can_create_product_with_category_specifications_and_base_unit(): void
     {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = $this->userWithRole('admin');
+        $admin = User::factory()->create();
         $category = Category::factory()->create();
         $unit = Unit::factory()->create();
         $specification = ProductSpecification::create([
@@ -71,8 +68,7 @@ class ProductCatalogTest extends TestCase
 
     public function test_product_cannot_be_saved_without_a_required_category_specification(): void
     {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = $this->userWithRole('admin');
+        $admin = User::factory()->create();
         $category = Category::factory()->create();
         $unit = Unit::factory()->create();
         $specification = ProductSpecification::create([
@@ -103,8 +99,7 @@ class ProductCatalogTest extends TestCase
 
     public function test_admin_can_create_category_and_configure_a_required_specification(): void
     {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = $this->userWithRole('admin');
+        $admin = User::factory()->create();
 
         $this->actingAs($admin);
 
@@ -137,8 +132,7 @@ class ProductCatalogTest extends TestCase
 
     public function test_admin_can_create_unit_and_units_in_use_are_deactivated_on_delete(): void
     {
-        $this->seed(RolePermissionSeeder::class);
-        $admin = $this->userWithRole('admin');
+        $admin = User::factory()->create();
 
         $this->actingAs($admin);
 
@@ -158,22 +152,14 @@ class ProductCatalogTest extends TestCase
         $this->assertDatabaseHas('units', ['id' => $unit->id, 'is_active' => 0]);
     }
 
-    public function test_cashier_can_view_products_but_cannot_create_catalog_data(): void
+    public function test_authenticated_admin_can_manage_catalog_data(): void
     {
-        $this->seed(RolePermissionSeeder::class);
-        $cashier = $this->userWithRole('kasir');
+        $admin = User::factory()->create();
 
-        $this->actingAs($cashier)->get(route('products.index'))->assertOk()->assertSee('Katalog barang');
-        $this->actingAs($cashier)->get(route('categories.index'))->assertForbidden();
+        $this->actingAs($admin)->get(route('products.index'))->assertOk()->assertSee('Katalog barang');
+        $this->get(route('categories.index'))->assertOk();
 
-        Livewire::actingAs($cashier);
-        Livewire::test(ManageProducts::class)->call('create')->assertForbidden();
-    }
-
-    private function userWithRole(string $roleName): User
-    {
-        $role = Role::where('name', $roleName)->firstOrFail();
-
-        return User::factory()->create(['role_id' => $role->id]);
+        Livewire::actingAs($admin);
+        Livewire::test(ManageProducts::class)->call('create')->assertSet('showForm', true);
     }
 }

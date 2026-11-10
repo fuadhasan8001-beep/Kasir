@@ -1,5 +1,5 @@
 <div class="inventory-layout">
-    <section class="catalog-panel"><div class="catalog-panel-heading"><div><h2>Catat pengeluaran</h2><p>Biaya dicatat oleh pemilik untuk laporan toko.</p></div></div>
+    <section class="catalog-panel"><div class="catalog-panel-heading"><div><h2>Catat pengeluaran</h2><p>Biaya operasional toko untuk laporan keuangan.</p></div></div>
         @if(session('status'))<div class="notice-card"><div><strong>{{ session('status') }}</strong></div></div>@endif
         <form class="catalog-form" wire:submit="save">
             <label>Kategori<input list="expense-categories" type="text" wire:model="category" placeholder="Mis. listrik, sewa, transportasi"><datalist id="expense-categories">@foreach($categories as $categoryOption)<option value="{{ $categoryOption }}">@endforeach</datalist>@error('category')<small>{{ $message }}</small>@enderror</label>
