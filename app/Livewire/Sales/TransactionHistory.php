@@ -11,23 +11,21 @@ class TransactionHistory extends Component
 {
     use WithPagination;
 
-    public string $dateFrom = '';
+    public string $year = '';
 
-    public string $dateTo = '';
-
-    public string $search = '';
+    public string $month = '';
 
     public ?int $expandedSaleId = null;
 
-    public function updatedDateFrom(): void
+    public function updatedYear(): void
     {
-        $this->validateOnly('dateFrom', ['dateFrom' => ['nullable', 'date']]);
+        $this->validateOnly('year', ['year' => ['nullable', 'integer', 'between:2000,2100']]);
         $this->resetPage();
     }
 
-    public function updatedDateTo(): void
+    public function updatedMonth(): void
     {
-        $this->validateOnly('dateTo', ['dateTo' => ['nullable', 'date']]);
+        $this->validateOnly('month', ['month' => ['nullable', 'integer', 'between:1,12']]);
         $this->resetPage();
     }
 
@@ -46,9 +44,8 @@ class TransactionHistory extends Component
         return view('livewire.sales.transaction-history', [
             'sales' => Sale::query()
                 ->with(['user', 'items'])
-                ->when($this->dateFrom, fn ($query) => $query->whereDate('created_at', '>=', $this->dateFrom))
-                ->when($this->dateTo, fn ($query) => $query->whereDate('created_at', '<=', $this->dateTo))
-                ->when($this->search, fn ($query) => $query->where('invoice_number', 'like', '%'.$this->search.'%'))
+                ->when($this->year, fn ($query) => $query->whereYear('created_at', $this->year))
+                ->when($this->month, fn ($query) => $query->whereMonth('created_at', $this->month))
                 ->latest()
                 ->paginate(15),
             'canViewProfit' => true,

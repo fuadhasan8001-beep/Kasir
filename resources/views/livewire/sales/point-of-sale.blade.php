@@ -1,8 +1,7 @@
 <div class="pos-page">
     @if (session('status')) <div class="notice-card"><div><strong>{{ session('status') }}</strong></div></div> @endif
     @if ($completedInvoice)
-        <div class="receipt-ready"><div><strong>Transaksi tersimpan</strong><p>Nomor invoice {{ $completedInvoice }}</p></div><button class="button-primary" type="button" onclick="window.print()">Cetak struk</button></div>
-        <div class="print-receipt"><h2>TokoBangunan</h2><p>Struk penjualan · {{ $completedInvoice }}</p><hr>@foreach($completedReceipt['items'] as $receiptItem)<div><span>{{ $receiptItem['name'] }} · {{ number_format($receiptItem['quantity'], 3, ',', '.') }} {{ $receiptItem['unit'] }}@if($receiptItem['weight']) / {{ number_format($receiptItem['weight'], 3, ',', '.') }} kg @endif</span><b>Rp {{ number_format($receiptItem['total'], 0, ',', '.') }}</b></div>@endforeach<hr><div><span>Subtotal</span><b>Rp {{ number_format($completedReceipt['subtotal'], 0, ',', '.') }}</b></div><div><span>Diskon</span><b>Rp {{ number_format($completedReceipt['discount'], 0, ',', '.') }}</b></div><div><strong>Total</strong><strong>Rp {{ number_format($completedReceipt['total'], 0, ',', '.') }}</strong></div><div><span>Diterima</span><b>Rp {{ number_format($completedReceipt['amount_received'], 0, ',', '.') }}</b></div><div><span>Kembalian</span><b>Rp {{ number_format($completedReceipt['change_amount'], 0, ',', '.') }}</b></div><p>Metode: {{ ['cash' => 'Tunai', 'bank_transfer' => 'Transfer bank', 'qris' => 'QRIS'][$completedReceipt['payment_method']] }}</p></div>
+        <div class="receipt-ready"><div><strong>Catatan tersimpan</strong><p>Nomor catatan {{ $completedInvoice }}</p></div></div>
     @endif
     <div class="pos-layout">
         <section class="catalog-panel pos-products">
@@ -43,12 +42,8 @@
                 @error('cart') <small class="catalog-error">{{ $message }}</small> @enderror
             </div>
             <div class="checkout-summary">
-                <div><span>Subtotal</span><strong>Rp {{ number_format($subtotal, 0, ',', '.') }}</strong></div>
-                <label>Diskon (Rp)<input class="catalog-input" type="number" min="0" step="100" wire:model.live="discount">@error('discount')<small class="catalog-error">{{ $message }}</small>@enderror</label>
-                <div class="grand-total"><span>Total bayar</span><strong>Rp {{ number_format($total, 0, ',', '.') }}</strong></div>
-                <label>Metode pembayaran<select wire:model="paymentMethod"><option value="cash">Tunai</option><option value="bank_transfer">Transfer bank</option><option value="qris">QRIS</option></select></label>
-                <label>Uang diterima<input class="catalog-input" type="number" min="0" step="100" wire:model="amountReceived" placeholder="Masukkan nominal diterima">@error('amountReceived')<small class="catalog-error">{{ $message }}</small>@enderror</label>
-                <button class="button-primary checkout-button" type="button" wire:click="checkout" wire:loading.attr="disabled">Simpan transaksi</button>
+                <div><span>Nilai catatan</span><strong>Rp {{ number_format($subtotal, 0, ',', '.') }}</strong></div>
+                <button class="button-primary checkout-button" type="button" wire:click="saveNote" wire:loading.attr="disabled">Simpan Catatan</button>
             </div>
         </section>
     </div>

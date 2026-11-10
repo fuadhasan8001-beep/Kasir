@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-labelledby="title">
+  <title id="title">Gunawan Jaya Steel</title>
+  <circle cx="60" cy="60" r="57" fill="#fff" stroke="#111" stroke-width="3"/>
+  <circle cx="60" cy="60" r="51" fill="none" stroke="#55ad24" stroke-width="4"/>
+  <path d="M18 47c14-25 56-35 84-18-25-8-48-3-61 11" fill="#55ad24"/>
+  <text x="60" y="68" text-anchor="middle" fill="#111" font-family="Arial,sans-serif" font-size="37" font-weight="900" font-style="italic">GJS</text>
+  <path d="M73 71h28v6H82v5h15v5H82v5h19v6H73z" fill="#777" stroke="#111" stroke-width="1.5"/>
+  <path d="M21 79c15 15 41 18 63 9-19 15-50 17-68 4" fill="#55ad24"/>
+</svg>

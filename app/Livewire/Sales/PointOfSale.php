@@ -8,7 +8,6 @@ use App\Models\Sale;
 use App\Models\StockMovement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Component;
@@ -35,13 +34,7 @@ class PointOfSale extends Component
 
     public string $discount = '0';
 
-    public string $paymentMethod = 'cash';
-
-    public string $amountReceived = '';
-
     public ?string $completedInvoice = null;
-
-    public ?array $completedReceipt = null;
 
     public string $checkoutToken = '';
 
@@ -112,7 +105,7 @@ class PointOfSale extends Component
         $this->cart = array_values(array_filter($this->cart, fn (array $item): bool => $item['key'] !== $key));
     }
 
-    public function checkout(): void
+    public function saveNote(): void
     {
         if ($this->cart === []) {
             $this->addError('cart', 'Tambahkan minimal satu barang ke transaksi.');
@@ -122,8 +115,6 @@ class PointOfSale extends Component
 
         $validated = $this->validate([
             'discount' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
-            'paymentMethod' => ['required', Rule::in(['cash', 'bank_transfer', 'qris'])],
-            'amountReceived' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'checkoutToken' => ['required', 'uuid'],
         ]);
 
@@ -137,7 +128,7 @@ class PointOfSale extends Component
             'cart.*.notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $sale = DB::transaction(function () use ($validated): Sale {
+        $sale = DB::transaction(function (): Sale {
             $existingSale = Sale::query()->where('request_key', $this->checkoutToken)->first();
 
             if ($existingSale !== null) {
@@ -165,27 +156,19 @@ class PointOfSale extends Component
             }
 
             $subtotal = round($subtotal, 2);
-            $total = round($subtotal - (float) $validated['discount'], 2);
-
-            if ($total < 0) {
-                throw ValidationException::withMessages(['discount' => 'Diskon tidak boleh melebihi subtotal.']);
-            }
-
-            if ((float) $validated['amountReceived'] < $total) {
-                throw ValidationException::withMessages(['amountReceived' => 'Uang diterima belum mencukupi total pembayaran.']);
-            }
+            $total = $subtotal;
 
             $sale = Sale::create([
                 'invoice_number' => 'INV-'.now()->format('Ymd-His').'-'.Str::upper(Str::random(5)),
                 'request_key' => $this->checkoutToken,
                 'user_id' => auth()->id(),
                 'subtotal' => $subtotal,
-                'discount' => $validated['discount'],
+                'discount' => 0,
                 'total' => $total,
-                'payment_method' => $validated['paymentMethod'],
-                'amount_received' => $validated['amountReceived'],
-                'change_amount' => (float) $validated['amountReceived'] - $total,
-                'payment_status' => 'paid',
+                'payment_method' => null,
+                'amount_received' => 0,
+                'change_amount' => 0,
+                'payment_status' => 'recorded',
             ]);
 
             foreach ($this->cart as $item) {
@@ -234,26 +217,9 @@ class PointOfSale extends Component
         });
 
         $this->completedInvoice = $sale->invoice_number;
-        $this->completedReceipt = [
-            'items' => $sale->items()->get()->map(fn ($item): array => [
-                'name' => $item->product_name,
-                'quantity' => $item->quantity,
-                'unit' => $item->unit_name,
-                'weight' => $item->actual_weight,
-                'total' => $item->line_total,
-            ])->all(),
-            'subtotal' => $sale->subtotal,
-            'discount' => $sale->discount,
-            'total' => $sale->total,
-            'payment_method' => $sale->payment_method,
-            'amount_received' => $sale->amount_received,
-            'change_amount' => $sale->change_amount,
-        ];
         $this->cart = [];
-        $this->discount = '0';
-        $this->amountReceived = '';
         $this->checkoutToken = (string) Str::uuid();
-        session()->flash('status', 'Transaksi berhasil disimpan.');
+        session()->flash('status', 'Catatan transaksi berhasil disimpan dan stok telah diperbarui.');
     }
 
     public function render(): View

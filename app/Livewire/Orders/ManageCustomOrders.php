@@ -3,7 +3,6 @@
 namespace App\Livewire\Orders;
 
 use App\Models\CustomOrder;
-use App\Models\CustomOrderPayment;
 use App\Models\CustomOrderStatusHistory;
 use App\Models\InventoryLevel;
 use App\Models\Product;
@@ -48,17 +47,7 @@ class ManageCustomOrders extends Component
 
     public string $notes = '';
 
-    public string $initialPayment = '0';
-
-    public string $paymentMethod = 'cash';
-
-    public string $initialPaymentMethod = 'cash';
-
     public string $createToken = '';
-
-    public string $paymentToken = '';
-
-    public string $paymentAmount = '';
 
     public string $actualWeight = '';
 
@@ -70,7 +59,6 @@ class ManageCustomOrders extends Component
     {
         $this->orderDate = now()->timezone('Asia/Jakarta')->toDateString();
         $this->createToken = (string) Str::uuid();
-        $this->paymentToken = (string) Str::uuid();
     }
 
     public function boot(): void
@@ -94,8 +82,6 @@ class ManageCustomOrders extends Component
             'agreedPrice' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
             'estimatedCompletionDate' => ['nullable', 'date', 'after_or_equal:orderDate'],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'initialPayment' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
-            'initialPaymentMethod' => ['required', Rule::in(['cash', 'bank_transfer', 'qris'])],
             'createToken' => ['required', 'uuid'],
         ], [
             'customerName.required' => 'Nama pelanggan wajib diisi.',
@@ -117,12 +103,6 @@ class ManageCustomOrders extends Component
         $totalPrice = $validated['priceBasis'] === 'weight'
             ? round($estimatedWeight * (float) $validated['agreedPrice'], 2)
             : (float) $validated['agreedPrice'];
-
-        if ((float) $validated['initialPayment'] > $totalPrice) {
-            $this->addError('initialPayment', 'DP tidak boleh melebihi total sementara pesanan.');
-
-            return;
-        }
 
         $order = DB::transaction(function () use ($validated, $product, $estimatedWeight, $totalPrice): CustomOrder {
             $existingOrder = CustomOrder::query()->where('request_key', $validated['createToken'])->first();
@@ -157,68 +137,11 @@ class ManageCustomOrders extends Component
 
             $this->recordStatus($order, null, 'pending');
 
-            if ((float) $validated['initialPayment'] > 0) {
-                $order->payments()->create([
-                    'user_id' => auth()->id(),
-                    'request_key' => (string) Str::uuid(),
-                    'amount' => $validated['initialPayment'],
-                    'balance_before' => $totalPrice,
-                    'balance_after' => $totalPrice - (float) $validated['initialPayment'],
-                    'payment_method' => $validated['initialPaymentMethod'],
-                    'paid_at' => now(),
-                ]);
-            }
-
             return $order;
         });
 
         $this->resetForm();
         session()->flash('status', 'Pesanan '.$order->order_number.' berhasil dibuat.');
-    }
-
-    public function recordPayment(int $orderId): void
-    {
-        $validated = $this->validate([
-            'paymentAmount' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
-            'paymentMethod' => ['required', Rule::in(['cash', 'bank_transfer', 'qris'])],
-            'paymentToken' => ['required', 'uuid'],
-        ], ['paymentAmount.gt' => 'Jumlah pembayaran harus lebih dari nol.']);
-
-        DB::transaction(function () use ($orderId, $validated): void {
-            $duplicate = CustomOrderPayment::query()->where('request_key', $validated['paymentToken'])->exists();
-
-            if ($duplicate) {
-                return;
-            }
-
-            $order = CustomOrder::query()->lockForUpdate()->findOrFail($orderId);
-
-            if ($order->status === 'canceled') {
-                throw ValidationException::withMessages(['paymentAmount' => 'Pesanan yang dibatalkan tidak menerima pembayaran.']);
-            }
-
-            $paid = (float) CustomOrderPayment::query()->where('custom_order_id', $order->id)->sum('amount');
-            $remaining = max(0, (float) $order->total_price - $paid);
-
-            if ((float) $validated['paymentAmount'] > $remaining) {
-                throw ValidationException::withMessages(['paymentAmount' => 'Pembayaran melebihi sisa tagihan sebesar Rp '.number_format($remaining, 0, ',', '.').'.']);
-            }
-
-            $order->payments()->create([
-                'user_id' => auth()->id(),
-                'request_key' => $validated['paymentToken'],
-                'amount' => $validated['paymentAmount'],
-                'balance_before' => $remaining,
-                'balance_after' => $remaining - (float) $validated['paymentAmount'],
-                'payment_method' => $validated['paymentMethod'],
-                'paid_at' => now(),
-            ]);
-        });
-
-        $this->paymentAmount = '';
-        $this->paymentToken = (string) Str::uuid();
-        $this->paymentMethod = 'cash';
-        session()->flash('status', 'Pembayaran pesanan berhasil dicatat.');
     }
 
     public function saveActualWeight(int $orderId): void
@@ -337,14 +260,14 @@ class ManageCustomOrders extends Component
     public function toggleDetails(int $orderId): void
     {
         $this->expandedOrderId = $this->expandedOrderId === $orderId ? null : $orderId;
-        $this->reset('paymentAmount', 'actualWeight', 'cancellationReason');
+        $this->reset('actualWeight', 'cancellationReason');
         $this->resetValidation();
     }
 
     public function showDetails(int $orderId): void
     {
         $this->expandedOrderId = $orderId;
-        $this->reset('paymentAmount', 'actualWeight', 'cancellationReason');
+        $this->reset('actualWeight', 'cancellationReason');
         $this->resetValidation();
     }
 
@@ -353,7 +276,7 @@ class ManageCustomOrders extends Component
         return view('livewire.orders.manage-custom-orders', [
             'products' => Product::query()->with('unit')->where('is_active', true)->orderBy('name')->get(),
             'orders' => CustomOrder::query()
-                ->with(['creator', 'payments.user', 'statusHistories.user', 'stockMovements.user'])
+                ->with(['creator', 'statusHistories.user', 'stockMovements.user'])
                 ->when($this->search, fn ($query) => $query->where(fn ($query) => $query
                     ->where('order_number', 'like', '%'.$this->search.'%')
                     ->orWhere('customer_name', 'like', '%'.$this->search.'%')
@@ -427,13 +350,10 @@ class ManageCustomOrders extends Component
     {
         $this->reset([
             'customerName', 'customerPhone', 'productId', 'specifications', 'diameter', 'shape',
-            'estimatedWeight', 'agreedPrice', 'estimatedCompletionDate', 'notes', 'initialPayment',
+            'estimatedWeight', 'agreedPrice', 'estimatedCompletionDate', 'notes',
         ]);
         $this->quantity = '1';
         $this->priceBasis = 'fixed';
-        $this->initialPayment = '0';
-        $this->paymentMethod = 'cash';
-        $this->initialPaymentMethod = 'cash';
         $this->orderDate = now()->timezone('Asia/Jakarta')->toDateString();
         $this->createToken = (string) Str::uuid();
         $this->resetValidation();

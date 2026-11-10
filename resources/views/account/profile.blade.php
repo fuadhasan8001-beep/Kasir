@@ -32,7 +32,7 @@
                 <div class="catalog-panel-heading">
                     <div><h2>Informasi profil</h2><p>Nama dan email untuk akun Anda.</p></div>
                 </div>
-                <form method="POST" action="{{ route('profile.update') }}" class="catalog-form">
+<form method="POST" action="{{ route('profile.update') }}" class="catalog-form">
                     @csrf
                     @method('PUT')
                     <label>Nama<input name="name" type="text" value="{{ old('name', $user->name) }}" maxlength="255" autocomplete="name" required>@error('name')<small>{{ $message }}</small>@enderror</label>
