@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Dashboard;
 
+use App\Models\CustomOrder;
 use App\Models\Expense;
 use App\Models\InventoryLevel;
 use App\Models\Sale;
@@ -19,8 +20,8 @@ class Overview extends Component
 
     public function render(): View
     {
-        $todaySales = Sale::query()->whereDate('created_at', today());
-        $todayItems = SaleItem::query()->whereHas('sale', fn ($query) => $query->whereDate('created_at', today()));
+        $todaySales = Sale::query()->whereDate('created_at', today())->where('payment_status', 'paid');
+        $todayItems = SaleItem::query()->whereHas('sale', fn ($query) => $query->whereDate('created_at', today())->where('payment_status', 'paid'));
         $profitAvailable = ! (clone $todayItems)->where('unit_cost', '<=', 0)->exists();
         $todayExpenses = (float) Expense::query()->whereDate('expense_date', today())->sum('amount');
 
@@ -37,6 +38,7 @@ class Overview extends Component
                     - (float) (clone $todaySales)->sum('discount') - $todayExpenses
                 : null,
             'recentSales' => Sale::query()
+                ->where('payment_status', 'paid')
                 ->with('user')
                 ->latest()
                 ->limit(6)
@@ -49,6 +51,10 @@ class Overview extends Component
                 ->limit(6)
                 ->get(),
             'profitAvailable' => $profitAvailable,
+            'pendingOrders' => CustomOrder::query()->whereIn('status', ['pending', 'producing', 'made'])->count(),
+            'readyOrders' => CustomOrder::query()->where('status', 'ready')->count(),
+            'todayWeight' => (float) (clone $todayItems)->sum('actual_weight'),
+            'recentOrders' => CustomOrder::query()->with('creator')->latest('order_date')->limit(5)->get(),
         ]);
     }
 }

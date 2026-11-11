@@ -17,7 +17,7 @@ class Product extends Model
 
     protected $fillable = [
         'sku', 'barcode', 'name', 'category_id', 'brand_id', 'unit_id', 'product_type',
-        'pricing_method', 'description', 'purchase_price', 'selling_price', 'minimum_stock', 'is_active',
+        'pricing_method', 'description', 'image_path', 'purchase_price', 'selling_price', 'minimum_stock', 'is_active',
     ];
 
     protected function casts(): array

@@ -27,6 +27,12 @@ class CatalogSeeder extends Seeder
 
         $definitions = [
             'Material Bangunan' => [],
+            'Besi Beton' => [['name' => 'Diameter besi', 'type' => 'number', 'unit' => 'mm'], ['name' => 'Panjang batang', 'type' => 'number', 'unit' => 'm']],
+            'Besi Siku' => [['name' => 'Panjang', 'type' => 'number', 'unit' => 'm'], ['name' => 'Lebar sisi', 'type' => 'number', 'unit' => 'mm'], ['name' => 'Tebal', 'type' => 'number', 'unit' => 'mm']],
+            'Besi Hollow' => [['name' => 'Panjang', 'type' => 'number', 'unit' => 'm'], ['name' => 'Lebar', 'type' => 'number', 'unit' => 'mm'], ['name' => 'Tebal', 'type' => 'number', 'unit' => 'mm']],
+            'Besi Plat' => [['name' => 'Panjang', 'type' => 'number', 'unit' => 'm'], ['name' => 'Lebar', 'type' => 'number', 'unit' => 'm'], ['name' => 'Tebal', 'type' => 'number', 'unit' => 'mm']],
+            'Slop' => [['name' => 'Panjang', 'type' => 'number', 'unit' => 'm'], ['name' => 'Jumlah tulangan', 'type' => 'integer', 'unit' => 'batang']],
+            'Lainnya' => [],
             'Cakar Ayam' => [
                 ['name' => 'Panjang', 'type' => 'number', 'unit' => 'cm'],
                 ['name' => 'Lebar', 'type' => 'number', 'unit' => 'cm'],

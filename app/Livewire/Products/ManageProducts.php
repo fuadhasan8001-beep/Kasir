@@ -10,14 +10,17 @@ use App\Models\ProductSpecification;
 use App\Models\ProductSpecificationValue;
 use App\Models\Unit;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 class ManageProducts extends Component
 {
+    use WithFileUploads;
     use WithPagination;
 
     public string $search = '';
@@ -41,6 +44,10 @@ class ManageProducts extends Component
     public string $pricingMethod = 'unit';
 
     public string $description = '';
+
+    public mixed $photo = null;
+
+    public string $currentImagePath = '';
 
     public string $purchasePrice = '0';
 
@@ -96,6 +103,8 @@ class ManageProducts extends Component
         $this->productType = $product->product_type;
         $this->pricingMethod = $product->pricing_method;
         $this->description = $product->description ?? '';
+        $this->photo = null;
+        $this->currentImagePath = $product->image_path ?? '';
         $this->purchasePrice = $product->purchase_price;
         $this->sellingPrice = $product->selling_price;
         $this->minimumStock = $product->minimum_stock;
@@ -117,6 +126,7 @@ class ManageProducts extends Component
             'productType' => ['required', Rule::in(['general', 'construction_material', 'assembled'])],
             'pricingMethod' => ['required', Rule::in(['unit', 'weight', 'bar'])],
             'description' => ['nullable', 'string', 'max:2000'],
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'purchasePrice' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'sellingPrice' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'minimumStock' => ['required', 'numeric', 'min:0', 'max:999999999999.999'],
@@ -160,7 +170,12 @@ class ManageProducts extends Component
             throw ValidationException::withMessages(['specificationValues' => 'Spesifikasi tidak sesuai kategori yang dipilih.']);
         }
 
-        DB::transaction(function () use ($validated, $specifications): void {
+        $previousImagePath = $this->editingProductId
+            ? Product::query()->whereKey($this->editingProductId)->value('image_path')
+            : null;
+        $newImagePath = $this->photo?->store('products', 'public');
+
+        DB::transaction(function () use ($validated, $specifications, $newImagePath): void {
             $brand = filled($validated['brandName'])
                 ? Brand::firstOrCreate(['name' => trim($validated['brandName'])], ['is_active' => true])
                 : null;
@@ -186,6 +201,10 @@ class ManageProducts extends Component
                 : new Product;
 
             $product->fill($attributes)->save();
+
+            if ($newImagePath !== null) {
+                $product->update(['image_path' => $newImagePath]);
+            }
             InventoryLevel::firstOrCreate(
                 ['product_id' => $product->id, 'inventory_type' => 'finished'],
                 ['quantity' => 0],
@@ -206,6 +225,10 @@ class ManageProducts extends Component
                 }
             }
         });
+
+        if ($newImagePath !== null && $previousImagePath !== null) {
+            Storage::disk('public')->delete($previousImagePath);
+        }
 
         $this->resetForm();
         session()->flash('status', 'Barang berhasil disimpan.');
@@ -228,6 +251,8 @@ class ManageProducts extends Component
             'sku', 'barcode', 'name', 'brandName', 'categoryId', 'unitId', 'description',
             'purchasePrice', 'sellingPrice', 'minimumStock', 'specificationValues', 'editingProductId',
         );
+        $this->photo = null;
+        $this->currentImagePath = '';
         $this->productType = 'general';
         $this->pricingMethod = 'unit';
         $this->purchasePrice = '0';

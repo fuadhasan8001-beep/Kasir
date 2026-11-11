@@ -10,11 +10,10 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:5,1');
 });
 
-Route::get('/dashboard', fn () => redirect()->route('kasir'))->middleware('auth')->name('dashboard');
-
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware('auth')->name('logout');
 
 Route::middleware('auth')->group(function () {
+    Route::view('/dashboard', 'dashboard')->name('dashboard');
     Route::view('/kasir', 'sales.create')->name('kasir');
     Route::view('/catatan', 'inventory.index')->name('catatan');
     Route::view('/riwayat', 'sales.index')->name('riwayat');

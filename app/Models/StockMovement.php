@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class StockMovement extends Model
 {
     protected $fillable = [
-        'product_id', 'user_id', 'sale_id', 'custom_order_id', 'movement_type', 'quantity', 'balance_after',
+        'product_id', 'user_id', 'sale_id', 'custom_order_id', 'custom_order_item_id', 'movement_type', 'quantity', 'balance_after',
         'inventory_type', 'reference', 'notes',
     ];
 
@@ -35,5 +35,10 @@ class StockMovement extends Model
     public function customOrder(): BelongsTo
     {
         return $this->belongsTo(CustomOrder::class);
+    }
+
+    public function customOrderItem(): BelongsTo
+    {
+        return $this->belongsTo(CustomOrderItem::class);
     }
 }

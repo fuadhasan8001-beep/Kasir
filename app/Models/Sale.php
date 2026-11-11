@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Sale extends Model
 {
     protected $fillable = [
-        'invoice_number', 'request_key', 'user_id', 'subtotal', 'discount', 'total', 'payment_method',
+        'invoice_number', 'request_key', 'user_id', 'customer_name', 'custom_order_id', 'subtotal', 'discount', 'total', 'payment_method',
         'amount_received', 'change_amount', 'payment_status',
     ];
 
@@ -32,5 +32,10 @@ class Sale extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SaleItem::class);
+    }
+
+    public function customOrder(): BelongsTo
+    {
+        return $this->belongsTo(CustomOrder::class);
     }
 }

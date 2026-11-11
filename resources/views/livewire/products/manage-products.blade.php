@@ -12,9 +12,9 @@
         <div class="mt-5 overflow-x-auto"><table class="catalog-table"><thead><tr><th>Barang</th><th>Kategori</th><th>Harga</th><th>Satuan</th><th>Status</th><th class="text-right">Tindakan</th></tr></thead><tbody>
             @forelse ($products as $product)
                 <tr wire:key="product-{{ $product->id }}">
-                    <td><div class="font-medium text-neutral-900">{{ $product->name }}</div><div class="mt-1 text-xs text-neutral-500">{{ $product->sku }}@if($product->barcode) · {{ $product->barcode }}@endif</div>@if($product->brand)<div class="mt-1 text-xs text-neutral-500">{{ $product->brand->name }}</div>@endif
+                    <td><div class="flex items-start gap-3">@if($product->image_path)<img class="product-thumb" src="{{ asset('storage/'.$product->image_path) }}" alt="{{ $product->name }}">@else<div class="product-thumb product-thumb-empty" aria-hidden="true">▦</div>@endif<div><div class="font-medium text-neutral-900">{{ $product->name }}</div><div class="mt-1 text-xs text-neutral-500">{{ $product->sku }}@if($product->barcode) · {{ $product->barcode }}@endif</div>@if($product->brand)<div class="mt-1 text-xs text-neutral-500">{{ $product->brand->name }}</div>@endif
                         @if($product->specificationValues->isNotEmpty())<div class="mt-2 flex flex-wrap gap-1">@foreach($product->specificationValues as $specificationValue)<span class="catalog-tag" wire:key="product-{{ $product->id }}-spec-{{ $specificationValue->id }}">{{ $specificationValue->specification->name }}: {{ $specificationValue->value }}{{ $specificationValue->specification->measurement_unit ? ' '.$specificationValue->specification->measurement_unit : '' }}</span>@endforeach</div>@endif
-                    </td>
+                    </div></div></td>
                     <td>{{ $product->category->name }}</td>
                     <td><div>Beli Rp{{ number_format((float) $product->purchase_price, 0, ',', '.') }}</div><div class="text-xs text-neutral-500">Jual Rp{{ number_format((float) $product->selling_price, 0, ',', '.') }}</div></td>
                     <td>{{ $product->unit->name }} <span class="text-xs text-neutral-500">({{ $product->unit->abbreviation }})</span></td>
@@ -58,6 +58,9 @@
                         </div></div>
                     @endif
                     <label>Deskripsi<textarea wire:model="description" rows="3" placeholder="Catatan produk (opsional)"></textarea>@error('description')<small>{{ $message }}</small>@enderror</label>
+                    <label>Foto barang<input wire:model="photo" type="file" accept="image/jpeg,image/png,image/webp">@error('photo')<small>{{ $message }}</small>@enderror</label>
+                    <div wire:loading wire:target="photo" class="text-xs text-neutral-500">Mengunggah foto...</div>
+                    @if($photo)<img class="product-photo-preview" src="{{ $photo->temporaryUrl() }}" alt="Pratinjau foto {{ $name }}">@elseif($currentImagePath)<img class="product-photo-preview" src="{{ asset('storage/'.$currentImagePath) }}" alt="Foto {{ $name }} saat ini">@endif
                     @error('specificationValues')<small class="catalog-error">{{ $message }}</small>@enderror
                     <div class="flex justify-end gap-2 border-t border-neutral-200 pt-4"><button class="button-secondary" wire:click="cancel" type="button">Batal</button><button class="button-primary" type="submit">Simpan barang</button></div>
                 </form>

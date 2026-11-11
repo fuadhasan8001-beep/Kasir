@@ -42,6 +42,7 @@
             </a>
             <nav class="sidebar-nav" aria-label="Navigasi utama">
                 <div class="nav-caption">MENU UTAMA</div>
+                <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><span aria-hidden="true">▦</span> Dashboard</a>
                 <a class="nav-item {{ request()->routeIs('kasir') ? 'active' : '' }}" href="{{ route('kasir') }}">
                     <span aria-hidden="true">▤</span> Kasir
                 </a>
@@ -51,6 +52,9 @@
                 <a class="nav-item {{ request()->routeIs('riwayat') ? 'active' : '' }}" href="{{ route('riwayat') }}">
                     <span aria-hidden="true">⏱</span> Riwayat Penjualan
                 </a>
+                <a class="nav-item {{ request()->routeIs('orders.custom') ? 'active' : '' }}" href="{{ route('orders.custom') }}"><span aria-hidden="true">⌑</span> Catatan Pesanan</a>
+                <a class="nav-item {{ request()->routeIs('products.*') ? 'active' : '' }}" href="{{ route('products.index') }}"><span aria-hidden="true">▤</span> Data barang</a>
+                <a class="nav-item {{ request()->routeIs('inventory.*') ? 'active' : '' }}" href="{{ route('inventory.index') }}"><span aria-hidden="true">⇄</span> Inventaris</a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="user-chip">
@@ -111,7 +115,7 @@
                     <a class="close-sheet" href="#" @click.prevent="accountSheetOpen = false">✕</a>
                 </div>
 <div class="sheet-body">
-                    <p class="muted">Hubungi pemilik sistem untuk reset kata sandi.</p>
+                    <p class="muted">Kelola profil akun admin.</p>
                     <a class="link-secondary" href="{{ route('profile.edit') }}">→ Profil</a>
                     <form method="POST" action="{{ route('logout') }}" class="logout-row">
                         @csrf

@@ -17,7 +17,7 @@ class AuthenticationTest extends TestCase
 
     public function test_login_page_renders_with_the_built_stylesheets(): void
     {
-        $this->get('/login')->assertOk()->assertSee('Selamat datang');
+        $this->get('/login')->assertOk()->assertSee('Masuk')->assertSee('Masuk untuk mengelola stok dan catatan.');
     }
 
     public function test_user_can_log_in_and_view_dashboard(): void
@@ -25,9 +25,9 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->create(['password' => 'secret-password']);
 
         $this->post('/login', ['email' => $user->email, 'password' => 'secret-password'])
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('kasir'));
 
-        $this->get('/')->assertOk()->assertSee('Ringkasan toko');
+        $this->get(route('dashboard'))->assertOk()->assertSee('Ringkasan aktivitas Gunawan Jaya Steel');
     }
 
     public function test_invalid_credentials_are_rejected(): void
