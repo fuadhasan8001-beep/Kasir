@@ -13,25 +13,22 @@
     mobileMenuOpen: false,
     accountSheetOpen: false,
     isMobile() {
-        return window.innerWidth <= 640;
+        return window.innerWidth <= 1023;
     },
-    pageTitle() {
-        return '{{ $title ?? "Gunawan Jaya Steel" }}';
-    }
 }" x-on:resize.window="
     if (mobileMenuOpen) mobileMenuOpen = false;
     if (accountSheetOpen) accountSheetOpen = false;
 " x-on:keydown.escape.window="mobileMenuOpen = false; accountSheetOpen = false">
         <!-- Mobile topbar: visible only on mobile, shows logo + page title -->
-        <header class="topbar mobile-topbar" x-show="isMobile()">
-            <button class="bottom-nav-toggle" type="button" aria-label="Buka menu navigasi" x-on:click="mobileMenuOpen = true">
+        <header class="topbar topbar-mobile" x-show="isMobile()">
+            <button class="mobile-menu-toggle" type="button" aria-label="Buka menu navigasi" x-on:click="mobileMenuOpen = true">
                 <span></span><span></span><span></span>
             </button>
             <div class="topbar-brand">
                 <img class="brand-logo" src="{{ asset('images/gjs-logo.svg') }}" alt="Gunawan Jaya Steel" />
                 <span class="brand-name">Gunawan Jaya Steel</span>
             </div>
-            <h1 class="title" x-text="pageTitle"></h1>
+            <h1 class="title">@yield('page-title', 'Kasir')</h1>
         </header>
 
         <!-- Desktop sidebar (shown on desktop) -->
@@ -43,18 +40,37 @@
             <nav class="sidebar-nav" aria-label="Navigasi utama">
                 <div class="nav-caption">MENU UTAMA</div>
                 <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}"><span aria-hidden="true">▦</span> Dashboard</a>
-                <a class="nav-item {{ request()->routeIs('kasir') ? 'active' : '' }}" href="{{ route('kasir') }}">
+                <a class="nav-item {{ request()->routeIs('kasir', 'sales.create') ? 'active' : '' }}" href="{{ route('kasir') }}">
                     <span aria-hidden="true">▤</span> Kasir
                 </a>
-                <a class="nav-item {{ request()->routeIs('catatan') ? 'active' : '' }}" href="{{ route('catatan') }}">
+                <a class="nav-item {{ request()->routeIs('catatan', 'inventory.index') ? 'active' : '' }}" href="{{ route('catatan') }}">
                     <span aria-hidden="true">◉</span> Catatan
                 </a>
-                <a class="nav-item {{ request()->routeIs('riwayat') ? 'active' : '' }}" href="{{ route('riwayat') }}">
+                <a class="nav-item {{ request()->routeIs('riwayat', 'sales.index') ? 'active' : '' }}" href="{{ route('riwayat') }}">
                     <span aria-hidden="true">⏱</span> Riwayat Penjualan
                 </a>
                 <a class="nav-item {{ request()->routeIs('orders.custom') ? 'active' : '' }}" href="{{ route('orders.custom') }}"><span aria-hidden="true">⌑</span> Catatan Pesanan</a>
                 <a class="nav-item {{ request()->routeIs('products.*') ? 'active' : '' }}" href="{{ route('products.index') }}"><span aria-hidden="true">▤</span> Data barang</a>
                 <a class="nav-item {{ request()->routeIs('inventory.*') ? 'active' : '' }}" href="{{ route('inventory.index') }}"><span aria-hidden="true">⇄</span> Inventaris</a>
+                <div class="nav-caption">KATALOG & PENGELOLAAN</div>
+                <a class="nav-item {{ request()->routeIs('orders.*') ? 'active' : '' }}" href="{{ route('orders.custom') }}">
+                    <span aria-hidden="true">⌁</span> Pesanan custom
+                </a>
+                <a class="nav-item {{ request()->routeIs('products.*') ? 'active' : '' }}" href="{{ route('products.index') }}">
+                    <span aria-hidden="true">▧</span> Barang
+                </a>
+                <a class="nav-item {{ request()->routeIs('categories.*') ? 'active' : '' }}" href="{{ route('categories.index') }}">
+                    <span aria-hidden="true">◫</span> Kategori
+                </a>
+                <a class="nav-item {{ request()->routeIs('units.*') ? 'active' : '' }}" href="{{ route('units.index') }}">
+                    <span aria-hidden="true">▤</span> Satuan
+                </a>
+                <a class="nav-item {{ request()->routeIs('expenses.*') ? 'active' : '' }}" href="{{ route('expenses.index') }}">
+                    <span aria-hidden="true">−</span> Pengeluaran
+                </a>
+                <a class="nav-item {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}">
+                    <span aria-hidden="true">◉</span> Profil
+                </a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="user-chip">
@@ -75,22 +91,39 @@
         <button class="sidebar-backdrop" type="button" aria-label="Tutup menu navigasi" x-show="mobileMenuOpen" x-on:click="mobileMenuOpen = false"></button>
 
         <main class="main-area">
+            <header class="desktop-topbar">
+                <div>
+                    <p class="desktop-topbar-kicker">RUANG OPERASIONAL</p>
+                    <h1>@yield('page-title', 'Kasir')</h1>
+                </div>
+                <div class="desktop-topbar-meta">
+                    <span class="system-status"><span class="status-dot"></span> Sistem siap</span>
+                    <span class="date-label">{{ now()->timezone('Asia/Jakarta')->translatedFormat('l, d F Y') }}</span>
+                    <a class="topbar-account" href="{{ route('profile.edit') }}" aria-label="Buka profil {{ auth()->user()->name }}">
+                        <span class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
+                    </a>
+                </div>
+            </header>
             <section class="content">
                 @yield('content')
+                <footer class="app-footer">
+                    <span>GJS <span aria-hidden="true">·</span> Ruang kerja toko</span>
+                    <span>{{ now()->timezone('Asia/Jakarta')->format('Y') }} Gunawan Jaya Steel</span>
+                </footer>
             </section>
         </main>
 
         <!-- Mobile bottom navigation -->
         <nav class="bottom-nav" x-show="isMobile()">
-            <a class="bottom-nav-item {{ request()->routeIs('kasir') ? 'active' : '' }}" href="{{ route('kasir') }}">
+            <a class="bottom-nav-item {{ request()->routeIs('kasir', 'sales.create') ? 'active' : '' }}" href="{{ route('kasir') }}">
                 <div class="nav-icon">▤</div>
                 <span>Kasir</span>
             </a>
-            <a class="bottom-nav-item {{ request()->routeIs('catatan') ? 'active' : '' }}" href="{{ route('catatan') }}">
+            <a class="bottom-nav-item {{ request()->routeIs('catatan', 'inventory.index') ? 'active' : '' }}" href="{{ route('catatan') }}">
                 <div class="nav-icon">◉</div>
                 <span>Catatan</span>
             </a>
-            <a class="bottom-nav-item {{ request()->routeIs('riwayat') ? 'active' : '' }}" href="{{ route('riwayat') }}">
+            <a class="bottom-nav-item {{ request()->routeIs('riwayat', 'sales.index') ? 'active' : '' }}" href="{{ route('riwayat') }}">
                 <div class="nav-icon">⏱</div>
                 <span>Riwayat</span>
             </a>
