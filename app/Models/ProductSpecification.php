@@ -13,11 +13,11 @@ class ProductSpecification extends Model
     /** @use HasFactory<ProductSpecificationFactory> */
     use HasFactory;
 
-    protected $fillable = ['category_id', 'name', 'key', 'data_type', 'measurement_unit', 'is_required', 'sort_order'];
+    protected $fillable = ['category_id', 'name', 'key', 'data_type', 'measurement_unit', 'options', 'allow_custom', 'is_required', 'sort_order'];
 
     protected function casts(): array
     {
-        return ['is_required' => 'boolean', 'sort_order' => 'integer'];
+        return ['is_required' => 'boolean', 'allow_custom' => 'boolean', 'options' => 'array', 'sort_order' => 'integer'];
     }
 
     public function category(): BelongsTo

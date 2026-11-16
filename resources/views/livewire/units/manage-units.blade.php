@@ -3,7 +3,7 @@
     <div class="grid gap-6 xl:grid-cols-[minmax(300px,0.7fr)_minmax(0,1.3fr)]">
         <section class="catalog-panel h-fit">
             <div class="catalog-panel-heading"><div><h2>{{ $editingUnitId ? 'Ubah satuan' : 'Tambah satuan' }}</h2><p>Atur presisi kuantitas sesuai karakter barang.</p></div></div>
-            <form wire:submit="save" class="catalog-form">
+            <form wire:submit="save" class="catalog-form unit-form-grid">
                 <label>Nama satuan<input wire:model="name" type="text" placeholder="Contoh: Kilogram">@error('name')<small>{{ $message }}</small>@enderror</label>
                 <label>Singkatan<input wire:model="abbreviation" type="text" placeholder="kg">@error('abbreviation')<small>{{ $message }}</small>@enderror</label>
                 <label>Jumlah angka desimal<input wire:model="decimalPlaces" type="number" min="0" max="6">@error('decimalPlaces')<small>{{ $message }}</small>@enderror</label>

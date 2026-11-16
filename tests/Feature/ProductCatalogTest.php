@@ -117,6 +117,8 @@ class ProductCatalogTest extends TestCase
             ->set('specificationKey', 'berat_aktual')
             ->set('specificationType', 'number')
             ->set('measurementUnit', 'kg')
+            ->set('specificationOptions', "Ø8 mm\nØ10 mm")
+            ->set('specificationAllowCustom', true)
             ->set('specificationRequired', true)
             ->call('saveSpecification')
             ->assertHasNoErrors();
@@ -126,7 +128,55 @@ class ProductCatalogTest extends TestCase
             'key' => 'berat_aktual',
             'data_type' => 'number',
             'measurement_unit' => 'kg',
+            'options' => json_encode(['Ø8 mm', 'Ø10 mm']),
+            'allow_custom' => 1,
             'is_required' => 1,
+        ]);
+    }
+
+    public function test_admin_can_configure_database_prices_for_product_variants(): void
+    {
+        $admin = User::factory()->create();
+        $category = Category::factory()->create();
+        $unit = Unit::factory()->create();
+        $specification = ProductSpecification::create([
+            'category_id' => $category->id,
+            'name' => 'Diameter',
+            'key' => 'diameter',
+            'data_type' => 'text',
+            'options' => ['Ø10 mm', 'Ø12 mm'],
+            'allow_custom' => false,
+            'is_required' => true,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($admin);
+
+        Livewire::test(ManageProducts::class)
+            ->set('sku', 'BESI-VAR-001')
+            ->set('name', 'Besi beton')
+            ->set('categoryId', $category->id)
+            ->set('unitId', $unit->id)
+            ->set('purchasePrice', '9000')
+            ->set('sellingPrice', '12000')
+            ->set('minimumStock', '0')
+            ->set('specificationValues.'.$specification->id, 'Ø12 mm')
+            ->set('variants', [[
+                'id' => null,
+                'specifications' => ['diameter' => 'Ø12 mm'],
+                'selling_price' => '15000',
+                'is_active' => true,
+            ]])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $product = Product::where('sku', 'BESI-VAR-001')->firstOrFail();
+
+        $this->assertDatabaseHas('product_variants', [
+            'product_id' => $product->id,
+            'specifications' => json_encode(['diameter' => 'Ø12 mm']),
+            'selling_price' => 15000,
+            'is_active' => 1,
         ]);
     }
 

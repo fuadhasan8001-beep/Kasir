@@ -6,7 +6,7 @@
 :root {
     --ui-black: #18231d;
     --ui-white: #FFFFFF;
-    --ui-bg: #f4f4ef;
+    --ui-bg: #f7f8f6;
     --ui-border: #e4e6df;
     --ui-secondary: #6f786f;
     --ui-success: #2e7651;
@@ -841,15 +841,6 @@ html, body, #app {
 
 .grid {
     display: grid;
-    gap: 16px;
-}
-
-@media (min-width: 768px) {
-    .grid { grid-template-columns: repeat(12, 1fr); }
-}
-
-@media (min-width: 1024px) {
-    .grid { grid-template-columns: repeat(12, 1fr); }
 }
 
 /* Spacing utilities */

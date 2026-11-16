@@ -17,7 +17,7 @@ class AuthenticationTest extends TestCase
 
     public function test_login_page_renders_with_the_built_stylesheets(): void
     {
-        $this->get('/login')->assertOk()->assertSee('Masuk')->assertSee('Masuk untuk mengelola stok dan catatan.');
+        $this->get('/login')->assertOk()->assertSee('Masuk')->assertSee('Gunawan Jaya Steel');
     }
 
     public function test_user_can_log_in_and_view_dashboard(): void
@@ -46,10 +46,24 @@ class AuthenticationTest extends TestCase
             $this->get(route($route))->assertOk();
         }
 
-        $this->get(route('dashboard'))
-            ->assertSee('Admin (Kasir)')
-            ->assertSee('Pesanan custom')
+        $dashboard = $this->get(route('dashboard'))
+            ->assertSee('Administrator')
+            ->assertSee('Riwayat Penjualan')
+            ->assertSee('Data Barang')
+            ->assertSee('Kategori')
+            ->assertSee('Satuan')
             ->assertSee('Inventaris')
+            ->assertSee('Pengeluaran')
+            ->assertSee('Laporan')
+            ->assertSee('Akun Saya')
+            ->assertSee('Ubah Password')
+            ->assertSee('Logout')
+            ->assertSee('images/logo-gjs.png')
+            ->assertDontSee('gjs-logo.svg')
             ->assertDontSee('Kelola kasir');
+
+        $this->assertDoesNotMatchRegularExpression('/<a class="nav-item[^\"]*" href="[^\"]*orders\/custom"/', $dashboard->getContent());
+        $cashierPage = $this->get(route('kasir'))->assertOk();
+        $this->assertStringNotContainsString('href="'.route('orders.custom').'"', $cashierPage->getContent());
     }
 }

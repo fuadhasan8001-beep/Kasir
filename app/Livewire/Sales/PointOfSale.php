@@ -5,11 +5,13 @@ namespace App\Livewire\Sales;
 use App\Models\Category;
 use App\Models\InventoryLevel;
 use App\Models\Product;
+use App\Models\ProductSpecification;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\StockMovement;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Livewire\Component;
@@ -34,6 +36,8 @@ class PointOfSale extends Component
 
     public string $diameter = '';
 
+    public string $shape = '';
+
     public string $length = '';
 
     public string $width = '';
@@ -41,6 +45,14 @@ class PointOfSale extends Component
     public string $customSpecification = '';
 
     public string $orderNotes = '';
+
+    public array $specificationInputs = [];
+
+    public array $customSpecificationInputs = [];
+
+    public ?string $editingCartKey = null;
+
+    public bool $showProductDetails = false;
 
     public array $cart = [];
 
@@ -57,7 +69,11 @@ class PointOfSale extends Component
 
     public function mount(): void
     {
-        $this->checkoutToken = (string) Str::uuid();
+        $cartState = session()->get($this->cartSessionKey(), []);
+        $this->cart = $cartState['items'] ?? [];
+        $this->customerName = $cartState['customerName'] ?? '';
+        $this->amountReceived = $cartState['amountReceived'] ?? '';
+        $this->checkoutToken = $cartState['checkoutToken'] ?? (string) Str::uuid();
     }
 
     public function boot(): void
@@ -75,11 +91,51 @@ class PointOfSale extends Component
         $this->resetValidation();
     }
 
+    public function updatedCustomerName(): void
+    {
+        $this->persistCart();
+    }
+
+    public function updatedAmountReceived(): void
+    {
+        $this->persistCart();
+    }
+
     public function updatedProductId(): void
     {
-        $product = $this->productId ? Product::query()->find($this->productId) : null;
-        $this->priceBasis = $product?->pricing_method === 'weight' ? 'weight' : 'unit';
-        $this->unitPrice = $product ? (string) $product->selling_price : '';
+        $product = $this->productId ? Product::query()->with('category')->find($this->productId) : null;
+
+        if ($product === null) {
+            $this->resetProductForm();
+        } else {
+            $this->prepareProductForm($product);
+        }
+
+        $this->resetValidation();
+    }
+
+    public function clearProductSelection(): void
+    {
+        $this->showProductDetails = false;
+        $this->editingCartKey = null;
+        $this->resetProductForm();
+        $this->resetValidation();
+    }
+
+    public function addProduct(int $productId): void
+    {
+        $product = Product::query()->with(['category', 'inventoryLevels'])->where('is_active', true)->findOrFail($productId);
+        $stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0);
+
+        if ($stock <= 0) {
+            $this->addError('product-selection', 'Stok '.$product->name.' sedang habis.');
+
+            return;
+        }
+
+        $this->productId = $product->id;
+        $this->prepareProductForm($product);
+        $this->showProductDetails = true;
         $this->resetValidation();
     }
 
@@ -87,81 +143,114 @@ class PointOfSale extends Component
     {
         $validated = $this->validate([
             'productId' => ['required', 'integer', 'exists:products,id'],
-            'quantity' => ['required', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
+            'quantity' => ['nullable', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
             'actualWeight' => ['nullable', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
-            'priceBasis' => ['required', Rule::in(['weight', 'unit', 'custom'])],
-            'unitPrice' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
-            'diameter' => ['nullable', 'string', 'max:80'],
-            'length' => ['nullable', 'string', 'max:80'],
-            'width' => ['nullable', 'string', 'max:80'],
-            'customSpecification' => ['nullable', 'string', 'max:500'],
             'orderNotes' => ['nullable', 'string', 'max:1000'],
         ], [
             'productId.required' => 'Pilih barang terlebih dahulu.',
             'quantity.gt' => 'Jumlah harus lebih dari nol.',
             'actualWeight.gt' => 'Berat aktual harus lebih dari nol.',
-            'unitPrice.required' => 'Masukkan harga yang disepakati.',
-            'unitPrice.gt' => 'Harga harus lebih dari nol.',
         ]);
 
         $product = Product::query()
-            ->with(['unit', 'category', 'inventoryLevels'])
+            ->with(['unit', 'category.specifications', 'variants', 'inventoryLevels'])
             ->where('is_active', true)
             ->findOrFail($validated['productId']);
 
-        if ($product->pricing_method === 'weight' && blank($validated['actualWeight'])) {
-            $this->addError('actualWeight', 'Berat aktual wajib diisi untuk barang yang stoknya dihitung per kilogram.');
+        $normalizedSpecifications = $this->normalizeSpecifications(
+            $product->category->specifications,
+            $this->specificationInputs,
+            $this->customSpecificationInputs,
+        );
+
+        $actualWeight = filled($validated['actualWeight']) ? (float) $validated['actualWeight'] : null;
+        $pricingBasis = $product->pricing_method === 'weight' ? 'weight' : 'unit';
+        $quantity = $pricingBasis === 'weight'
+            ? $actualWeight
+            : (filled($validated['quantity']) ? (float) $validated['quantity'] : null);
+        $amount = $pricingBasis === 'weight' ? $actualWeight : $quantity;
+
+        if ($amount === null || $amount <= 0) {
+            $this->addError($pricingBasis === 'weight' ? 'actualWeight' : 'quantity', $pricingBasis === 'weight'
+                ? 'Masukkan berat dalam kilogram.'
+                : 'Masukkan jumlah yang akan dijual.');
 
             return;
         }
 
-        if ($validated['priceBasis'] === 'weight' && blank($validated['actualWeight'])) {
-            $this->addError('actualWeight', 'Masukkan berat aktual untuk menghitung harga per kilogram.');
+        $matchedVariant = $this->findMatchingVariant($product, $normalizedSpecifications['values'], $normalizedSpecifications['custom_keys']);
+        $unitPrice = $matchedVariant ? (float) $matchedVariant->selling_price : (float) $product->selling_price;
+
+        if ($product->variants->where('is_active', true)->isNotEmpty() && $matchedVariant === null) {
+            $this->addError('specificationInputs', 'Harga variasi ini belum diatur admin. Pilih ukuran standar atau minta admin mengatur harga custom.');
 
             return;
         }
 
-        $lineTotal = match ($validated['priceBasis']) {
-            'weight' => (float) $validated['actualWeight'] * (float) $validated['unitPrice'],
-            'custom' => (float) $validated['unitPrice'],
-            default => (float) $validated['quantity'] * (float) $validated['unitPrice'],
-        };
         $stockQuantity = $product->pricing_method === 'weight'
-            ? (float) $validated['actualWeight']
-            : (float) $validated['quantity'];
-        $unitName = $validated['priceBasis'] === 'weight'
-            ? 'kg'
-            : $product->unit->abbreviation;
+            ? (float) $actualWeight
+            : (float) $quantity;
+        $availableStock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0);
 
-        $this->cart[] = [
-            'key' => (string) Str::uuid(),
+        if ($stockQuantity > $availableStock) {
+            $this->addError('quantity', 'Jumlah melebihi stok tersedia ('.number_format($availableStock, 3, ',', '.').' '.$product->unit->abbreviation.').');
+
+            return;
+        }
+
+        $unitName = $pricingBasis === 'weight'
+            ? 'kg'
+            : ($product->pricing_method === 'bar' ? 'batang' : $product->unit->abbreviation);
+
+        $cartItem = [
+            'key' => $this->editingCartKey ?? (string) Str::uuid(),
             'product_id' => $product->id,
+            'variant_id' => $matchedVariant?->id,
             'product_name' => $product->name,
+            'image_path' => $product->image_path,
             'category_name' => $product->category->name,
-            'quantity' => (float) $validated['quantity'],
-            'actual_weight' => filled($validated['actualWeight']) ? (float) $validated['actualWeight'] : null,
+            'quantity' => $quantity,
+            'actual_weight' => $actualWeight,
             'stock_quantity' => $stockQuantity,
             'stock_unit' => $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation,
             'unit_name' => $unitName,
-            'pricing_basis' => $validated['priceBasis'],
-            'unit_price' => (float) $validated['unitPrice'],
-            'line_total' => round($lineTotal, 2),
-            'specifications' => array_filter([
-                'Diameter' => $validated['diameter'],
-                'Panjang' => $validated['length'],
-                'Lebar' => $validated['width'],
-                'Ukuran custom' => $validated['customSpecification'],
-            ]),
+            'pricing_basis' => $pricingBasis,
+            'unit_price' => $unitPrice,
+            'line_total' => round((float) $amount * $unitPrice, 2),
+            'specification_values' => $normalizedSpecifications['values'],
+            'specification_custom_keys' => $normalizedSpecifications['custom_keys'],
+            'specifications' => $normalizedSpecifications['labels'],
             'notes' => $validated['orderNotes'],
         ];
 
+        $matchingCartIndex = $this->findMatchingCartItemIndex($cartItem);
+
+        if ($matchingCartIndex !== null) {
+            $matchingItemKey = $this->cart[$matchingCartIndex]['key'];
+            $matchingItem = $this->combineCartItems($this->cart[$matchingCartIndex], $cartItem, $product);
+            $this->cart = array_map(
+                fn (array $item): array => $item['key'] === $matchingItemKey ? $matchingItem : $item,
+                $this->cart,
+            );
+
+            if ($this->editingCartKey !== null) {
+                $this->cart = array_values(array_filter($this->cart, fn (array $item): bool => $item['key'] !== $this->editingCartKey));
+            }
+        } elseif ($this->editingCartKey !== null) {
+            $this->cart = array_map(fn (array $item): array => $item['key'] === $this->editingCartKey ? $cartItem : $item, $this->cart);
+        } else {
+            $this->cart[] = $cartItem;
+        }
+
         $this->reset([
-            'productId', 'actualWeight', 'unitPrice', 'diameter', 'length', 'width',
-            'customSpecification', 'orderNotes',
+            'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width',
+            'customSpecification', 'orderNotes', 'editingCartKey', 'specificationInputs', 'customSpecificationInputs',
         ]);
-        $this->quantity = '1';
+        $this->showProductDetails = false;
+        $this->quantity = '';
         $this->priceBasis = 'unit';
         $this->resetValidation();
+        $this->persistCart();
     }
 
     public function editItem(string $key): void
@@ -173,21 +262,32 @@ class PointOfSale extends Component
         }
 
         $this->productId = $item['product_id'];
+        $this->editingCartKey = $item['key'];
         $this->quantity = (string) $item['quantity'];
         $this->actualWeight = $item['actual_weight'] !== null ? (string) $item['actual_weight'] : '';
         $this->priceBasis = $item['pricing_basis'];
         $this->unitPrice = (string) $item['unit_price'];
-        $this->diameter = $item['specifications']['Diameter'] ?? '';
-        $this->length = $item['specifications']['Panjang'] ?? '';
-        $this->width = $item['specifications']['Lebar'] ?? '';
-        $this->customSpecification = $item['specifications']['Ukuran custom'] ?? '';
+        $this->specificationInputs = $item['specification_values'] ?? [];
+        $this->customSpecificationInputs = array_fill_keys($item['specification_custom_keys'] ?? [], '');
+
+        foreach ($item['specification_custom_keys'] ?? [] as $key) {
+            $this->specificationInputs[$key] = '__custom__';
+            $this->customSpecificationInputs[$key] = $item['specification_values'][$key] ?? '';
+        }
         $this->orderNotes = $item['notes'] ?? '';
-        $this->removeItem($key);
+        $this->showProductDetails = true;
+        $this->resetValidation();
     }
 
     public function removeItem(string $key): void
     {
         $this->cart = array_values(array_filter($this->cart, fn (array $item): bool => $item['key'] !== $key));
+
+        if ($this->editingCartKey === $key) {
+            $this->clearProductSelection();
+        }
+
+        $this->persistCart();
     }
 
     public function clearCart(): void
@@ -195,7 +295,10 @@ class PointOfSale extends Component
         $this->cart = [];
         $this->amountReceived = '';
         $this->showConfirmation = false;
+        $this->showProductDetails = false;
+        $this->editingCartKey = null;
         $this->resetValidation();
+        session()->forget($this->cartSessionKey());
     }
 
     public function startCheckout(): void
@@ -206,13 +309,21 @@ class PointOfSale extends Component
             return;
         }
 
+        if (collect($this->cartForDisplay())->contains(fn (array $item): bool => ! $item['price_available'])) {
+            $this->addError('cart', 'Harga salah satu variasi sudah tidak tersedia. Edit barang tersebut sebelum melanjutkan.');
+
+            return;
+        }
+
         $this->showConfirmation = true;
+        $this->showProductDetails = false;
         $this->resetValidation();
     }
 
     public function cancelCheckout(): void
     {
         $this->showConfirmation = false;
+        $this->showProductDetails = false;
         $this->resetValidation();
     }
 
@@ -230,129 +341,153 @@ class PointOfSale extends Component
             'checkoutToken' => ['required', 'uuid'],
             'cart' => ['required', 'array', 'min:1', 'max:100'],
             'cart.*.product_id' => ['required', 'integer', 'exists:products,id'],
-            'cart.*.quantity' => ['required', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
+            'cart.*.quantity' => ['nullable', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
             'cart.*.actual_weight' => ['nullable', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
-            'cart.*.stock_quantity' => ['required', 'numeric', 'gt:0', 'max:999999999'],
-            'cart.*.pricing_basis' => ['required', Rule::in(['weight', 'unit', 'custom'])],
-            'cart.*.unit_price' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
-            'cart.*.line_total' => ['required', 'numeric', 'gt:0', 'max:9999999999999.99'],
-            'cart.*.specifications' => ['array', 'max:10'],
+            'cart.*.specification_values' => ['nullable', 'array', 'max:30'],
+            'cart.*.specification_values.*' => ['string', 'max:500'],
+            'cart.*.specification_custom_keys' => ['nullable', 'array', 'max:30'],
+            'cart.*.specification_custom_keys.*' => ['string', 'max:80'],
             'cart.*.specifications.*' => ['string', 'max:500'],
             'cart.*.notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $normalizedCart = [];
+        try {
+            $sale = DB::transaction(function () use ($validated): Sale {
+                $existingSale = Sale::query()->where('request_key', $validated['checkoutToken'])->first();
 
-        foreach ($validated['cart'] as $item) {
-            $weight = filled($item['actual_weight']) ? (float) $item['actual_weight'] : null;
-            $quantity = (float) $item['quantity'];
+                if ($existingSale !== null) {
+                    return $existingSale->load('items');
+                }
 
-            if ($item['pricing_basis'] === 'weight' && $weight === null) {
-                throw ValidationException::withMessages(['cart' => 'Berat aktual wajib diisi untuk harga per kilogram.']);
-            }
+                $normalizedCart = [];
 
-            $lineTotal = match ($item['pricing_basis']) {
-                'weight' => $weight * (float) $item['unit_price'],
-                'custom' => (float) $item['unit_price'],
-                default => $quantity * (float) $item['unit_price'],
-            };
+                foreach ($validated['cart'] as $item) {
+                    $product = Product::withTrashed()
+                        ->with(['unit', 'category.specifications', 'variants'])
+                        ->lockForUpdate()
+                        ->find($item['product_id']);
 
-            $normalizedCart[] = [
-                'product_id' => (int) $item['product_id'],
-                'quantity' => $quantity,
-                'actual_weight' => $weight,
-                'pricing_basis' => $item['pricing_basis'],
-                'unit_price' => (float) $item['unit_price'],
-                'line_total' => round($lineTotal, 2),
-                'specifications' => $item['specifications'] ?? [],
-                'notes' => $item['notes'] ?? null,
-            ];
-        }
+                    if ($product === null || $product->trashed() || ! $product->is_active) {
+                        $productName = $product?->name ?? 'Barang pilihan';
 
-        $total = round(array_sum(array_column($normalizedCart, 'line_total')), 2);
+                        throw ValidationException::withMessages(['cart' => 'Barang '.$productName.' sudah tidak tersedia.']);
+                    }
 
-        if ((float) $validated['amountReceived'] < $total) {
-            $this->addError('amountReceived', 'Uang diterima belum mencukupi total transaksi.');
+                    $specificationData = $this->normalizeSpecifications(
+                        $product->category->specifications,
+                        $item['specification_values'] ?? [],
+                        [],
+                        $item['specification_custom_keys'] ?? [],
+                    );
+                    $variant = $this->findMatchingVariant($product, $specificationData['values'], $specificationData['custom_keys']);
+
+                    if ($product->variants->where('is_active', true)->isNotEmpty() && $variant === null) {
+                        throw ValidationException::withMessages(['cart' => 'Harga variasi '.$product->name.' sudah tidak tersedia. Perbarui spesifikasi atau harga custom produk.']);
+                    }
+
+                    $pricingBasis = $product->pricing_method === 'weight' ? 'weight' : 'unit';
+                    $weight = filled($item['actual_weight'] ?? null) ? (float) $item['actual_weight'] : null;
+                    $quantity = $pricingBasis === 'weight'
+                        ? $weight
+                        : (filled($item['quantity'] ?? null) ? (float) $item['quantity'] : null);
+                    $amount = $pricingBasis === 'weight' ? $weight : $quantity;
+
+                    if ($amount === null || $amount <= 0) {
+                        throw ValidationException::withMessages(['cart' => 'Jumlah atau berat '.$product->name.' tidak valid.']);
+                    }
+
+                    $unitPrice = (float) ($variant?->selling_price ?? $product->selling_price);
+                    $stockQuantity = $pricingBasis === 'weight' ? $weight : $quantity;
+                    $unitName = $pricingBasis === 'weight' ? 'kg' : ($product->pricing_method === 'bar' ? 'batang' : $product->unit->abbreviation);
+
+                    $normalizedCart[] = [
+                        'product' => $product,
+                        'product_id' => $product->id,
+                        'quantity' => $quantity,
+                        'actual_weight' => $weight,
+                        'stock_quantity' => $stockQuantity,
+                        'pricing_basis' => $pricingBasis,
+                        'unit_name' => $unitName,
+                        'unit_price' => $unitPrice,
+                        'line_total' => round((float) $amount * $unitPrice, 2),
+                        'specifications' => $specificationData['labels'],
+                        'notes' => $item['notes'] ?? null,
+                    ];
+                }
+
+                $total = round(array_sum(array_column($normalizedCart, 'line_total')), 2);
+
+                if ((float) $validated['amountReceived'] < $total) {
+                    throw ValidationException::withMessages(['amountReceived' => 'Uang diterima belum mencukupi total transaksi.']);
+                }
+
+                $sale = Sale::create([
+                    'invoice_number' => 'INV-'.now()->format('Ymd-His').'-'.Str::upper(Str::random(5)),
+                    'request_key' => $validated['checkoutToken'],
+                    'user_id' => auth()->id(),
+                    'customer_name' => filled($validated['customerName']) ? trim($validated['customerName']) : null,
+                    'subtotal' => $total,
+                    'discount' => 0,
+                    'total' => $total,
+                    'payment_method' => 'cash',
+                    'amount_received' => $validated['amountReceived'],
+                    'change_amount' => round((float) $validated['amountReceived'] - $total, 2),
+                    'payment_status' => 'paid',
+                ]);
+
+                foreach ($normalizedCart as $item) {
+                    $product = $item['product'];
+                    $stockQuantity = $item['stock_quantity'];
+
+                    if ($stockQuantity <= 0) {
+                        throw ValidationException::withMessages(['cart' => 'Berat aktual wajib diisi untuk barang '.$product->name.'.']);
+                    }
+
+                    $stock = InventoryLevel::query()
+                        ->where('product_id', $product->id)
+                        ->where('inventory_type', 'finished')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($stock === null || (float) $stock->quantity < $stockQuantity) {
+                        throw ValidationException::withMessages(['cart' => 'Stok '.$product->name.' tidak mencukupi. Periksa inventaris sebelum menyimpan transaksi.']);
+                    }
+
+                    $stock->decrement('quantity', $stockQuantity);
+                    $balance = (float) $stock->fresh()->quantity;
+                    $sale->items()->create([
+                        'product_id' => $product->id,
+                        'product_name' => $product->name,
+                        'unit_name' => $item['unit_name'],
+                        'pricing_basis' => $item['pricing_basis'],
+                        'quantity' => $item['quantity'],
+                        'actual_weight' => $item['actual_weight'],
+                        'specifications' => $item['specifications'],
+                        'notes' => $item['notes'] ?: null,
+                        'unit_price' => $item['unit_price'],
+                        'unit_cost' => $product->purchase_price,
+                        'line_total' => $item['line_total'],
+                    ]);
+
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'user_id' => auth()->id(),
+                        'sale_id' => $sale->id,
+                        'movement_type' => 'sale',
+                        'quantity' => -1 * $stockQuantity,
+                        'balance_after' => $balance,
+                        'inventory_type' => 'finished',
+                        'reference' => $sale->invoice_number,
+                    ]);
+                }
+
+                return $sale->load('items');
+            });
+        } catch (ValidationException $exception) {
+            $this->setErrorBag($exception->validator->errors());
 
             return;
         }
-
-        $sale = DB::transaction(function () use ($validated, $normalizedCart, $total): Sale {
-            $existingSale = Sale::query()->where('request_key', $validated['checkoutToken'])->first();
-
-            if ($existingSale !== null) {
-                return $existingSale->load('items');
-            }
-
-            $sale = Sale::create([
-                'invoice_number' => 'INV-'.now()->format('Ymd-His').'-'.Str::upper(Str::random(5)),
-                'request_key' => $validated['checkoutToken'],
-                'user_id' => auth()->id(),
-                'customer_name' => filled($validated['customerName']) ? trim($validated['customerName']) : null,
-                'subtotal' => $total,
-                'discount' => 0,
-                'total' => $total,
-                'payment_method' => 'cash',
-                'amount_received' => $validated['amountReceived'],
-                'change_amount' => round((float) $validated['amountReceived'] - $total, 2),
-                'payment_status' => 'paid',
-            ]);
-
-            foreach ($normalizedCart as $item) {
-                $product = Product::query()->with('unit')->lockForUpdate()->findOrFail($item['product_id']);
-
-                if (! $product->is_active) {
-                    throw ValidationException::withMessages(['cart' => 'Barang '.$product->name.' sudah tidak aktif.']);
-                }
-
-                $stockQuantity = $product->pricing_method === 'weight'
-                    ? (float) ($item['actual_weight'] ?? 0)
-                    : (float) $item['quantity'];
-
-                if ($stockQuantity <= 0) {
-                    throw ValidationException::withMessages(['cart' => 'Berat aktual wajib diisi untuk barang '.$product->name.'.']);
-                }
-
-                $stock = InventoryLevel::query()
-                    ->where('product_id', $product->id)
-                    ->where('inventory_type', 'finished')
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($stock === null || (float) $stock->quantity < $stockQuantity) {
-                    throw ValidationException::withMessages(['cart' => 'Stok '.$product->name.' tidak mencukupi. Periksa inventaris sebelum menyimpan transaksi.']);
-                }
-
-                $stock->decrement('quantity', $stockQuantity);
-                $balance = (float) $stock->fresh()->quantity;
-                $sale->items()->create([
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'unit_name' => $item['pricing_basis'] === 'weight' ? 'kg' : $product->unit->abbreviation,
-                    'pricing_basis' => $item['pricing_basis'],
-                    'quantity' => $item['quantity'],
-                    'actual_weight' => $item['actual_weight'],
-                    'specifications' => $item['specifications'],
-                    'notes' => $item['notes'] ?: null,
-                    'unit_price' => $item['unit_price'],
-                    'unit_cost' => $product->purchase_price,
-                    'line_total' => $item['line_total'],
-                ]);
-
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'user_id' => auth()->id(),
-                    'sale_id' => $sale->id,
-                    'movement_type' => 'sale',
-                    'quantity' => -1 * $stockQuantity,
-                    'balance_after' => $balance,
-                    'inventory_type' => 'finished',
-                    'reference' => $sale->invoice_number,
-                ]);
-            }
-
-            return $sale->load('items');
-        });
 
         $this->completedInvoice = $sale->invoice_number;
         $this->completedReceipt = [
@@ -371,7 +506,10 @@ class PointOfSale extends Component
         $this->customerName = '';
         $this->amountReceived = '';
         $this->checkoutToken = (string) Str::uuid();
+        session()->forget($this->cartSessionKey());
         $this->showConfirmation = false;
+        $this->showProductDetails = false;
+        $this->editingCartKey = null;
         session()->flash('status', 'Transaksi berhasil disimpan.');
     }
 
@@ -389,12 +527,188 @@ class PointOfSale extends Component
             ->limit(60)
             ->get();
 
+        $cartForDisplay = $this->cartForDisplay();
+
         return view('livewire.sales.point-of-sale', [
             'products' => $products,
+            'selectedProduct' => $this->productId
+                ? Product::query()->with(['unit', 'category.specifications', 'inventoryLevels', 'variants'])->find($this->productId)
+                : null,
             'categories' => Category::query()->where('is_active', true)->orderBy('name')->get(),
-            'subtotal' => round(array_sum(array_column($this->cart, 'line_total')), 2),
-            'totalItems' => array_sum(array_column($this->cart, 'quantity')),
-            'totalWeight' => array_sum(array_map(fn (array $item): float => (float) ($item['actual_weight'] ?? 0), $this->cart)),
+            'cartForDisplay' => $cartForDisplay,
+            'subtotal' => round(array_sum(array_column($cartForDisplay, 'line_total')), 2),
+            'isCartPage' => request()->routeIs('kasir.cart'),
         ]);
+    }
+
+    private function persistCart(): void
+    {
+        session()->put($this->cartSessionKey(), [
+            'items' => $this->cart,
+            'customerName' => $this->customerName,
+            'amountReceived' => $this->amountReceived,
+            'checkoutToken' => $this->checkoutToken,
+        ]);
+    }
+
+    private function cartSessionKey(): string
+    {
+        return 'cashier.cart.'.auth()->id();
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function cartForDisplay(): array
+    {
+        $products = Product::query()->with('variants')->whereIn('id', collect($this->cart)->pluck('product_id'))->get()->keyBy('id');
+
+        return array_map(function (array $item) use ($products): array {
+            $product = $products->get($item['product_id']);
+
+            if ($product === null) {
+                $item['price_available'] = false;
+                $item['unit_price'] = 0;
+                $item['line_total'] = 0;
+
+                return $item;
+            }
+
+            $variant = $this->findMatchingVariant($product, $item['specification_values'] ?? [], $item['specification_custom_keys'] ?? []);
+            $hasActiveVariants = $product->variants->contains(fn (ProductVariant $activeVariant): bool => $activeVariant->is_active);
+            $item['price_available'] = ! $hasActiveVariants || $variant !== null;
+            $item['unit_price'] = $item['price_available'] ? (float) ($variant?->selling_price ?? $product->selling_price) : 0;
+            $amount = $product->pricing_method === 'weight'
+                ? (float) ($item['actual_weight'] ?? 0)
+                : (float) ($item['quantity'] ?? 0);
+            $item['line_total'] = round($amount * $item['unit_price'], 2);
+
+            return $item;
+        }, $this->cart);
+    }
+
+    private function findMatchingCartItemIndex(array $cartItem): ?int
+    {
+        foreach ($this->cart as $index => $existingItem) {
+            if ($existingItem['key'] === $this->editingCartKey || $existingItem['product_id'] !== $cartItem['product_id']) {
+                continue;
+            }
+
+            $existingSpecifications = collect($existingItem['specification_values'] ?? [])->sortKeys()->all();
+            $newSpecifications = collect($cartItem['specification_values'] ?? [])->sortKeys()->all();
+            $existingCustomKeys = collect($existingItem['specification_custom_keys'] ?? [])->sort()->values()->all();
+            $newCustomKeys = collect($cartItem['specification_custom_keys'] ?? [])->sort()->values()->all();
+
+            if ($existingSpecifications === $newSpecifications && $existingCustomKeys === $newCustomKeys) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function combineCartItems(array $existingItem, array $newItem, Product $product): array
+    {
+        $existingItem['quantity'] = (float) $existingItem['quantity'] + (float) $newItem['quantity'];
+        $existingItem['actual_weight'] = $existingItem['actual_weight'] !== null && $newItem['actual_weight'] !== null
+            ? (float) $existingItem['actual_weight'] + (float) $newItem['actual_weight']
+            : null;
+        $existingItem['stock_quantity'] = $product->pricing_method === 'weight'
+            ? (float) ($existingItem['actual_weight'] ?? 0)
+            : (float) $existingItem['quantity'];
+        $existingItem['unit_price'] = $newItem['unit_price'];
+        $amount = $product->pricing_method === 'weight'
+            ? (float) ($existingItem['actual_weight'] ?? 0)
+            : (float) $existingItem['quantity'];
+        $existingItem['line_total'] = round($amount * $existingItem['unit_price'], 2);
+        $notes = collect([$existingItem['notes'] ?? null, $newItem['notes'] ?? null])
+            ->filter()
+            ->unique()
+            ->implode(' · ');
+        $existingItem['notes'] = $notes !== '' ? $notes : null;
+
+        return $existingItem;
+    }
+
+    private function prepareProductForm(Product $product): void
+    {
+        $this->reset(['actualWeight', 'diameter', 'shape', 'length', 'width', 'customSpecification', 'orderNotes']);
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
+        $this->quantity = '';
+        $this->priceBasis = $product->pricing_method === 'weight' ? 'weight' : 'unit';
+        $this->unitPrice = (string) $product->selling_price;
+    }
+
+    private function resetProductForm(): void
+    {
+        $this->reset([
+            'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width',
+            'customSpecification', 'orderNotes',
+        ]);
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
+        $this->quantity = '';
+        $this->priceBasis = 'unit';
+    }
+
+    /**
+     * @param  Collection<int, ProductSpecification>  $specifications
+     * @param  array<string, string>  $selectedValues
+     * @param  array<string, string>  $customValues
+     * @param  array<int, string>  $forcedCustomKeys
+     * @return array{values: array<string, string>, custom_keys: array<int, string>, labels: array<string, string>}
+     */
+    private function normalizeSpecifications(Collection $specifications, array $selectedValues, array $customValues, array $forcedCustomKeys = []): array
+    {
+        $values = [];
+        $customKeys = [];
+        $labels = [];
+
+        foreach ($specifications as $specification) {
+            $selected = $selectedValues[$specification->key] ?? '';
+            $isCustom = in_array($specification->key, $forcedCustomKeys, true) || $selected === '__custom__';
+            $value = $isCustom ? trim($customValues[$specification->key] ?? $selectedValues[$specification->key] ?? '') : trim($selected);
+
+            if ($value === '') {
+                if ($specification->is_required) {
+                    throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Pilih atau isi '.$specification->name.'.']);
+                }
+
+                continue;
+            }
+
+            if ($isCustom && ! $specification->allow_custom) {
+                throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Nilai khusus tidak diizinkan untuk '.$specification->name.'.']);
+            }
+
+            if (! $isCustom && filled($specification->options) && ! in_array($value, $specification->options, true)) {
+                throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Pilihan '.$specification->name.' tidak valid.']);
+            }
+
+            $values[$specification->key] = $value;
+            $labels[$specification->name] = $value;
+
+            if ($isCustom) {
+                $customKeys[] = $specification->key;
+            }
+        }
+
+        return ['values' => $values, 'custom_keys' => $customKeys, 'labels' => $labels];
+    }
+
+    private function findMatchingVariant(Product $product, array $values, array $customKeys): ?ProductVariant
+    {
+        if ($customKeys !== []) {
+            return null;
+        }
+
+        $normalizedValues = collect($values)->sortKeys()->all();
+
+        return $product->variants->first(function (ProductVariant $variant) use ($normalizedValues): bool {
+            $variantSpecifications = collect($variant->specifications)->sortKeys()->all();
+
+            return $variant->is_active
+                && $variantSpecifications !== []
+                && collect($normalizedValues)->only(array_keys($variantSpecifications))->sortKeys()->all() === $variantSpecifications;
+        });
     }
 }

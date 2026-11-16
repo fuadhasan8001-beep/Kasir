@@ -9,26 +9,36 @@
             <button class="button-secondary" type="button" onclick="window.print()">Cetak struk</button>
         </section>
         <section class="print-receipt">
+            <img class="print-receipt-logo" src="{{ asset('images/logo-gjs.png') }}" alt="Gunawan Jaya Steel">
             <h2>Gunawan Jaya Steel</h2>
             <p>Struk penjualan · {{ $completedInvoice }}</p>
             @foreach($completedReceipt['items'] as $receiptItem)
-                <div><span>{{ $receiptItem['name'] }} · {{ number_format($receiptItem['quantity'], 3, ',', '.') }} {{ $receiptItem['unit'] }}@if($receiptItem['weight']) · {{ number_format($receiptItem['weight'], 3, ',', '.') }} kg @endif</span><b>Rp {{ number_format($receiptItem['total'], 0, ',', '.') }}</b></div>
+                <div><span>{{ $receiptItem['name'] }} · {{ number_format($receiptItem['quantity'], 3, ',', '.') }} {{ $receiptItem['unit'] }}@if($receiptItem['weight']) · {{ number_format($receiptItem['weight'], 3, ',', '.') }} kg @endif</span><b>@rupiah($receiptItem['total'])</b></div>
             @endforeach
             <hr>
-            <div><strong>Total</strong><strong>Rp {{ number_format($completedReceipt['total'], 0, ',', '.') }}</strong></div>
-            <div><span>Tunai diterima</span><b>Rp {{ number_format($completedReceipt['received'], 0, ',', '.') }}</b></div>
-            <div><span>Kembalian</span><b>Rp {{ number_format($completedReceipt['change'], 0, ',', '.') }}</b></div>
+            <div><strong>Total</strong><strong>@rupiah($completedReceipt['total'])</strong></div>
+            <div><span>Tunai diterima</span><b>@rupiah($completedReceipt['received'])</b></div>
+            <div><span>Kembalian</span><b>@rupiah($completedReceipt['change'])</b></div>
         </section>
     @endif
 
-    <div class="pos-workspace">
+    @if($isCartPage)
+        <div class="cart-page-heading"><a class="button-secondary button-small" href="{{ route('kasir') }}">← Kembali ke katalog</a><div><h2>Periksa keranjang</h2><p>Ubah jumlah atau spesifikasi sebelum pembayaran tunai.</p></div></div>
+        @include('livewire.sales.cart-panel')
+    @else
+        <div class="pos-catalog-toolbar">
+            <div><h2>Katalog produk</h2><p>Pilih produk untuk memulai transaksi.</p></div>
+            <a class="button-primary cart-page-link" href="{{ route('kasir.cart') }}" aria-label="Buka keranjang, {{ count($cart) }} jenis produk">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg><span>Keranjang</span><b>{{ count($cart) }}</b>
+            </a>
+        </div>
         <section class="catalog-panel pos-products-panel">
             <div class="catalog-panel-heading">
-                <div><h2>Katalog barang</h2><p>Pilih barang untuk mulai mengisi transaksi.</p></div>
-                <span class="pos-item-count">{{ $products->count() }} barang</span>
+                <div><h2>Katalog Produk</h2><p>Pilih produk untuk menambahkannya ke transaksi.</p></div>
+                <span class="pos-item-count">{{ $products->count() }} produk</span>
             </div>
 
-            <label class="search-label"><span>Cari barang</span><input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="Nama, SKU, atau barcode"></label>
+            <label class="search-label"><span>Cari produk</span><input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="Nama, SKU, atau barcode"></label>
 
             <div class="category-chips" aria-label="Filter kategori">
                 <button type="button" class="category-chip {{ $categoryFilter === '' ? 'active' : '' }}" wire:click="$set('categoryFilter', '')">Semua</button>
@@ -37,100 +47,136 @@
                 @endforeach
             </div>
 
+            @error('product-selection')<p class="catalog-error pos-selection-error">{{ $message }}</p>@enderror
+
             <div class="pos-product-grid">
                 @forelse ($products as $product)
-                    @php($stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0))
-                    <button class="pos-product-card {{ $productId === $product->id ? 'selected' : '' }}" type="button" wire:key="pos-product-{{ $product->id }}" wire:click="$set('productId', {{ $product->id }})">
-                        @if($product->image_path)
-                            <img class="pos-product-image" src="{{ asset('storage/'.$product->image_path) }}" alt="{{ $product->name }}" loading="lazy">
-                        @else
-                            <span class="pos-product-image pos-product-placeholder" aria-hidden="true">▦</span>
-                        @endif
+                    @php
+                        $stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0);
+                    @endphp
+                    <button class="pos-product-card {{ $productId === $product->id ? 'selected' : '' }} {{ $stock <= 0 ? 'out-of-stock' : '' }}" type="button" wire:key="pos-product-{{ $product->id }}" wire:click="addProduct({{ $product->id }})" @disabled($stock <= 0) aria-label="{{ $stock <= 0 ? 'Stok habis: ' : 'Pilih produk: ' }}{{ $product->name }}">
+                        <span class="pos-product-photo-wrap">
+                            <img class="pos-product-image" src="{{ $product->image_path ? asset('storage/'.$product->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $product->name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'">
+                            @if($stock <= 0)<span class="pos-stock-badge stock-empty">Stok habis</span>@endif
+                        </span>
                         <span class="pos-product-card-body">
-                            <strong>{{ $product->name }}</strong>
-                            <small>{{ $product->category->name }} · {{ $product->sku }}</small>
-                            @if($product->specificationValues->isNotEmpty())<small>{{ $product->specificationValues->take(2)->map(fn ($value) => $value->specification->name.': '.$value->value.($value->specification->measurement_unit ? ' '.$value->specification->measurement_unit : ''))->implode(' · ') }}</small>@endif
-                            <span class="pos-product-card-foot"><b>Rp {{ number_format($product->selling_price, 0, ',', '.') }}</b><small class="{{ $stock > 0 ? 'stock-available' : 'stock-empty' }}">{{ number_format($stock, 3, ',', '.') }} {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</small></span>
+                            <span class="pos-product-copy"><strong>{{ $product->name }}</strong><small>{{ $product->pricing_method === 'weight' ? 'per kg' : ($product->pricing_method === 'bar' ? 'per batang' : 'per '.$product->unit->abbreviation) }}</small><b>@rupiah($product->selling_price)</b></span>
+                            <span class="pos-product-action" aria-hidden="true">+</span>
                         </span>
                     </button>
                 @empty
-                    <div class="pos-empty-state"><span>⌕</span><strong>Barang tidak ditemukan</strong><p>Coba nama atau kode barang lain, atau pilih kategori berbeda.</p></div>
+                    <div class="pos-empty-state"><strong>Produk belum tersedia</strong><p>Produk aktif akan muncul di sini setelah ditambahkan melalui Data Barang.</p></div>
                 @endforelse
             </div>
         </section>
+    @endif
 
-        <section class="catalog-panel pos-checkout-panel">
-            <div class="catalog-panel-heading">
-                <div><h2>Transaksi baru</h2><p>Masukkan spesifikasi dan harga sesuai kesepakatan.</p></div>
-                <span class="cart-badge">{{ count($cart) }}</span>
-            </div>
+    @if($showProductDetails && $selectedProduct)
+        @php
+            $specificationsComplete = true;
+            $selectedSpecificationValues = [];
+            foreach ($selectedProduct->category->specifications as $specification) {
+                $selection = $specificationInputs[$specification->key] ?? '';
+                $isCustomSelection = $selection === '__custom__';
+                $specificationValue = $isCustomSelection
+                    ? trim($customSpecificationInputs[$specification->key] ?? '')
+                    : trim($selection);
+                if ($specification->is_required && $specificationValue === '') {
+                    $specificationsComplete = false;
+                }
+                if ($specificationValue !== '') {
+                    $selectedSpecificationValues[$specification->key] = $specificationValue;
+                }
+            }
+            $selectedSpecificationValues = collect($selectedSpecificationValues)->sortKeys()->all();
+            $matchedVariant = $selectedProduct->variants->first(function ($variant) use ($selectedSpecificationValues) {
+                $variantSpecifications = collect($variant->specifications)->sortKeys()->all();
 
-            <label class="customer-field">Nama pembeli <span>(opsional)</span><input class="catalog-input" type="text" wire:model="customerName" maxlength="160" placeholder="Nama pembeli"></label>
-
-            <form class="catalog-form pos-item-form" wire:submit="addItem">
-                <label>Barang dipilih
-                    <select wire:model.live="productId"><option value="">Pilih barang dari katalog</option>@foreach ($products as $product)<option value="{{ $product->id }}">{{ $product->name }} — {{ $product->sku }}</option>@endforeach</select>
-                    @error('productId')<small>{{ $message }}</small>@enderror
-                </label>
-                @php($selectedProduct = $products->firstWhere('id', $productId))
-                @if($selectedProduct)
-                    <div class="selected-product-summary"><strong>{{ $selectedProduct->name }}</strong><small>{{ $selectedProduct->category->name }} · Stok {{ number_format((float) ($selectedProduct->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0), 3, ',', '.') }} {{ $selectedProduct->pricing_method === 'weight' ? 'kg' : $selectedProduct->unit->abbreviation }}</small></div>
-                @endif
-                <div class="pos-input-grid">
-                    <label>Jumlah<input type="number" min="0.001" step="0.001" wire:model="quantity" placeholder="1">@error('quantity')<small>{{ $message }}</small>@enderror</label>
-                    <label>Berat aktual (kg)<input type="number" min="0.001" step="0.001" wire:model="actualWeight" placeholder="Jika diketahui">@error('actualWeight')<small>{{ $message }}</small>@enderror</label>
+                return $variant->is_active
+                    && $variantSpecifications !== []
+                    && collect($selectedSpecificationValues)->only(array_keys($variantSpecifications))->sortKeys()->all() === $variantSpecifications;
+            });
+            $hasActiveVariants = $selectedProduct->variants->contains(fn ($variant) => $variant->is_active);
+            $hasIncompleteCustomSelection = collect($selectedProduct->category->specifications)->contains(fn ($specification) => ($specificationInputs[$specification->key] ?? '') === '__custom__' && blank($customSpecificationInputs[$specification->key] ?? ''));
+            $selectedUnitPrice = $matchedVariant ? (float) $matchedVariant->selling_price : (float) $selectedProduct->selling_price;
+            $amountForTotal = $selectedProduct->pricing_method === 'weight' ? (float) ($actualWeight ?: 0) : (float) ($quantity ?: 0);
+            $canShowPrice = $specificationsComplete
+                && $amountForTotal > 0
+                && (! $hasActiveVariants || $matchedVariant !== null)
+                && ! $hasIncompleteCustomSelection;
+            $estimatedTotal = $amountForTotal * $selectedUnitPrice;
+        @endphp
+        <div class="catalog-modal-backdrop" wire:key="product-details-modal" wire:click.self="clearProductSelection">
+            <section class="catalog-modal pos-product-modal" role="dialog" aria-modal="true" aria-labelledby="product-details-title">
+                <div class="catalog-panel-heading">
+                    <div><h2 id="product-details-title">{{ $editingCartKey ? 'Edit produk di keranjang' : 'Spesifikasi produk' }}</h2><p>Periksa jumlah dan harga sebelum masuk keranjang.</p></div>
+                    <button class="button-secondary button-small" type="button" wire:click="clearProductSelection" aria-label="Batal">Batal</button>
                 </div>
-                <div class="pos-input-grid">
-                    <label>Metode harga<select wire:model.live="priceBasis"><option value="weight">Per kilogram</option><option value="unit">Per batang / satuan</option><option value="custom">Harga custom total</option></select></label>
-                    <label>{{ $priceBasis === 'weight' ? 'Harga per kg (Rp)' : ($priceBasis === 'custom' ? 'Harga custom (Rp)' : 'Harga per satuan (Rp)') }}<input type="number" min="1" step="1" wire:model="unitPrice" placeholder="Masukkan harga">@error('unitPrice')<small>{{ $message }}</small>@enderror</label>
+                <div class="pos-selected-product">
+                    <img src="{{ $selectedProduct->image_path ? asset('storage/'.$selectedProduct->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $selectedProduct->name }}" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'">
+                    <div><strong>{{ $selectedProduct->name }}</strong><small>{{ $selectedProduct->category->name }}</small></div>
                 </div>
-                <div class="pos-input-grid pos-dimensions">
-                    <label>Diameter<input type="text" wire:model="diameter" placeholder="Mis. 10 mm"></label>
-                    <label>Panjang<input type="text" wire:model="length" placeholder="Mis. 6 m"></label>
-                    <label>Lebar<input type="text" wire:model="width" placeholder="Mis. 20 cm"></label>
-                </div>
-                <label>Ukuran / spesifikasi custom<input type="text" wire:model="customSpecification" maxlength="500" placeholder="Contoh: cakar 40 × 40 cm"></label>
-                <label>Catatan tambahan<textarea rows="2" wire:model="orderNotes" placeholder="Catatan untuk transaksi"></textarea></label>
-                <button class="button-secondary add-item-button" type="submit" wire:loading.attr="disabled" wire:target="addItem">Tambah barang</button>
-            </form>
-
-            <div class="cart-section">
-                <div class="cart-heading"><h3>Keranjang</h3>@if($cart)<button class="text-button" type="button" wire:click="clearCart" wire:confirm="Kosongkan semua barang dalam keranjang?">Kosongkan</button>@endif</div>
-                <div class="cart-list">
-                    @forelse ($cart as $item)
-                        <article class="cart-item" wire:key="cart-{{ $item['key'] }}">
-                            <div class="cart-item-main"><strong>{{ $item['product_name'] }}</strong><small>{{ number_format($item['quantity'], 3, ',', '.') }} {{ $item['unit_name'] }}@if($item['actual_weight']) · {{ number_format($item['actual_weight'], 3, ',', '.') }} kg @endif</small>@if($item['specifications'])<small>{{ collect($item['specifications'])->map(fn ($value, $key) => $key.': '.$value)->implode(' · ') }}</small>@endif@if($item['notes'])<small>{{ $item['notes'] }}</small>@endif</div>
-                            <div class="cart-item-actions"><b>Rp {{ number_format($item['line_total'], 0, ',', '.') }}</b><div><button class="text-button" type="button" wire:click="editItem('{{ $item['key'] }}')">Edit</button><button class="text-button text-danger" type="button" wire:click="removeItem('{{ $item['key'] }}')">Hapus</button></div></div>
-                        </article>
-                    @empty
-                        <div class="empty-state">Belum ada barang. Pilih barang dari katalog untuk memulai.</div>
-                    @endforelse
-                    @error('cart')<small class="catalog-error">{{ $message }}</small>@enderror
-                </div>
-            </div>
-
-            <div class="checkout-summary">
-                <div><span>Total item</span><strong>{{ number_format($totalItems, 3, ',', '.') }}</strong></div>
-                <div><span>Total berat</span><strong>{{ number_format($totalWeight, 3, ',', '.') }} kg</strong></div>
-                <div class="grand-total"><span>Total transaksi</span><strong>Rp {{ number_format($subtotal, 0, ',', '.') }}</strong></div>
-                <button class="button-primary checkout-button" type="button" wire:click="startCheckout" @disabled(!$cart)>Lanjut ke pembayaran tunai</button>
-            </div>
-        </section>
-    </div>
+                <form class="catalog-form pos-item-form" wire:submit="addItem">
+                    @if($selectedProduct->category->specifications->isNotEmpty())
+                        <div class="pos-input-grid">
+                            @foreach($selectedProduct->category->specifications as $specification)
+                                <label wire:key="pos-spec-{{ $specification->id }}">{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif @if($specification->is_required)<span aria-hidden="true">*</span>@endif
+                                    @if(filled($specification->options))
+                                        <select wire:model.live="specificationInputs.{{ $specification->key }}">
+                                            <option value="">Pilih {{ strtolower($specification->name) }}</option>
+                                            @foreach($specification->options as $option)
+                                                <option value="{{ $option }}">{{ $option }}</option>
+                                            @endforeach
+                                            @if($specification->allow_custom)<option value="__custom__">Ukuran custom</option>@endif
+                                        </select>
+                                        @if($specification->allow_custom && ($specificationInputs[$specification->key] ?? '') === '__custom__')
+                                            <input type="text" wire:model.live.debounce.250ms="customSpecificationInputs.{{ $specification->key }}" maxlength="500" placeholder="Ketik {{ strtolower($specification->name) }}">
+                                        @endif
+                                    @elseif($specification->data_type === 'boolean')
+                                        <select wire:model.live="specificationInputs.{{ $specification->key }}"><option value="">Pilih</option><option value="1">Ya</option><option value="0">Tidak</option></select>
+                                    @else
+                                        <input type="text" wire:model.live.debounce.250ms="specificationInputs.{{ $specification->key }}" maxlength="500" placeholder="Masukkan {{ strtolower($specification->name) }}">
+                                    @endif
+                                    @error('specificationInputs.'.$specification->key)<small>{{ $message }}</small>@enderror
+                                </label>
+                            @endforeach
+                        </div>
+                    @endif
+                    <div class="pos-input-grid">
+                        @if($selectedProduct->pricing_method !== 'weight')
+                            <label>Jumlah {{ $selectedProduct->pricing_method === 'bar' ? 'batang' : $selectedProduct->unit->abbreviation }}<input type="number" min="0.001" step="0.001" wire:model.live.debounce.250ms="quantity" placeholder="Masukkan jumlah">@error('quantity')<small>{{ $message }}</small>@enderror</label>
+                        @else
+                            <label>Berat aktual (kg)<input type="number" min="0.001" step="0.001" wire:model.live.debounce.250ms="actualWeight" placeholder="Masukkan berat">@error('actualWeight')<small>{{ $message }}</small>@enderror</label>
+                        @endif
+                    </div>
+                    <label>Catatan tambahan<textarea rows="2" wire:model="orderNotes" placeholder="Catatan untuk transaksi"></textarea></label>
+                    @error('productId')<small class="catalog-error">{{ $message }}</small>@enderror
+                    @error('specificationInputs')<small class="catalog-error">{{ $message }}</small>@enderror
+                    @if($canShowPrice)
+                        <div class="pos-estimated-total"><span>Harga satuan · {{ $selectedProduct->pricing_method === 'weight' ? 'kg' : ($selectedProduct->pricing_method === 'bar' ? 'batang' : $selectedProduct->unit->abbreviation) }}</span><strong>@rupiah($selectedUnitPrice)</strong></div>
+                        <div class="pos-estimated-total"><span>Subtotal</span><strong>@rupiah($estimatedTotal)</strong></div>
+                    @elseif($hasActiveVariants && $specificationsComplete)
+                        <small class="catalog-error">Harga untuk ukuran ini belum diatur admin. Konfigurasikan harga variasi atau custom sebelum melanjutkan.</small>
+                    @endif
+                    <button class="button-primary add-item-button" type="submit" wire:loading.attr="disabled" wire:target="addItem">{{ $editingCartKey ? 'Simpan perubahan' : 'Tambahkan ke Keranjang' }}</button>
+                </form>
+            </section>
+        </div>
+    @endif
 
     @if($showConfirmation)
         <div class="catalog-modal-backdrop" wire:key="checkout-confirmation">
             <section class="catalog-modal checkout-modal" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
-                <div class="catalog-panel-heading"><div><h2 id="checkout-title">Konfirmasi transaksi</h2><p>Periksa ringkasan sebelum menyimpan pembayaran tunai.</p></div><button class="button-secondary button-small" type="button" wire:click="cancelCheckout" aria-label="Tutup">Tutup</button></div>
+                <div class="catalog-panel-heading"><div><h2 id="checkout-title">Pembayaran tunai</h2><p>Periksa total transaksi sebelum menyimpan pembayaran.</p></div><button class="button-secondary button-small" type="button" wire:click="cancelCheckout" aria-label="Tutup">Tutup</button></div>
                 <div class="confirmation-summary">
-                    @foreach($cart as $item)
-                        <div><span>{{ $item['product_name'] }} · {{ number_format($item['quantity'], 3, ',', '.') }} {{ $item['unit_name'] }}</span><strong>Rp {{ number_format($item['line_total'], 0, ',', '.') }}</strong></div>
+                    @foreach($cartForDisplay as $item)
+                        <div><span>{{ $item['product_name'] }} · @if($item['pricing_basis'] === 'weight'){{ number_format($item['actual_weight'], 3, ',', '.') }} kg @else{{ number_format($item['quantity'], 3, ',', '.') }} {{ $item['unit_name'] }}@endif</span><strong>@if($item['price_available'])@rupiah($item['line_total'])@else Harga tidak tersedia @endif</strong></div>
                     @endforeach
-                    <div class="confirmation-total"><span>Total tagihan</span><strong>Rp {{ number_format($subtotal, 0, ',', '.') }}</strong></div>
+                    <div class="confirmation-total"><span>Total tagihan</span><strong>@rupiah($subtotal)</strong></div>
                 </div>
                 <label class="cash-input-label">Uang tunai diterima<input class="catalog-input" type="number" min="{{ $subtotal }}" step="1" wire:model.live="amountReceived" placeholder="Masukkan nominal">@error('amountReceived')<small class="catalog-error">{{ $message }}</small>@enderror</label>
-                <div class="change-summary"><span>Kembalian</span><strong>Rp {{ number_format(max(0, (float) $amountReceived - $subtotal), 0, ',', '.') }}</strong></div>
-                <div class="modal-actions"><button class="button-secondary" type="button" wire:click="cancelCheckout">Kembali</button><button class="button-primary" type="button" wire:click="checkout" wire:loading.attr="disabled" wire:target="checkout">Konfirmasi & simpan</button></div>
+                <div class="change-summary"><span>Kembalian</span><strong>@rupiah(max(0, (float) $amountReceived - $subtotal))</strong></div>
+                <div class="modal-actions"><button class="button-secondary" type="button" wire:click="cancelCheckout">Kembali</button><button class="button-primary" type="button" wire:click="checkout" wire:loading.attr="disabled" wire:target="checkout">Konfirmasi &amp; simpan</button></div>
             </section>
         </div>
     @endif

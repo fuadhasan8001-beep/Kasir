@@ -1,5 +1,11 @@
 <div class="inventory-page">
     @if (session('status')) <div class="notice-card"><div><strong>{{ session('status') }}</strong></div></div> @endif
+    <section class="inventory-summary" aria-label="Ringkasan stok">
+        <article class="metric-card"><span>Jenis barang</span><strong>{{ $stockSummary->product_count ?? 0 }}</strong><small>Produk aktif terdaftar</small></article>
+        <article class="metric-card"><span>Tersedia</span><strong>{{ $stockSummary->available_stock_count ?? 0 }}</strong><small>Di atas stok minimum</small></article>
+        <article class="metric-card"><span>Stok menipis</span><strong>{{ $stockSummary->low_stock_count ?? 0 }}</strong><small>Lebih dari 0 hingga minimum</small></article>
+        <article class="metric-card"><span>Stok habis</span><strong>{{ $stockSummary->out_of_stock_count ?? 0 }}</strong><small>Saldo stok 0</small></article>
+    </section>
     <div class="inventory-layout">
         <section class="catalog-panel">
             <div class="catalog-panel-heading"><div><h2>Catat perubahan stok</h2><p>Setiap perubahan dicatat dalam riwayat inventaris.</p></div></div>
@@ -17,15 +23,16 @@
             <div class="table-scroll"><table class="catalog-table"><thead><tr><th>Barang</th><th>Stok</th><th>Minimum</th><th>Status</th></tr></thead><tbody>
                 @forelse ($products as $product)
                     @php($stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0))
-                    <tr wire:key="inventory-{{ $product->id }}"><td><strong>{{ $product->name }}</strong><small class="table-subtext">{{ $product->sku }}</small></td><td>{{ number_format($stock, 3, ',', '.') }} {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td><td>{{ number_format($product->minimum_stock, 3, ',', '.') }} {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td><td><span class="catalog-status {{ $stock <= (float) $product->minimum_stock ? 'catalog-status-off' : 'catalog-status-on' }}">{{ $stock <= (float) $product->minimum_stock ? 'Stok menipis' : 'Tersedia' }}</span></td></tr>
+                    @php($stockStatus = $stock <= 0 ? 'Habis' : ($stock <= (float) $product->minimum_stock ? 'Stok menipis' : 'Tersedia'))
+                    <tr wire:key="inventory-{{ $product->id }}"><td><strong>{{ $product->name }}</strong><small class="table-subtext">{{ $product->sku }}</small></td><td>{{ number_format($stock, 3, ',', '.') }} {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td><td>{{ number_format($product->minimum_stock, 3, ',', '.') }} {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td><td><span class="catalog-status {{ $stock <= (float) $product->minimum_stock ? 'catalog-status-off' : 'catalog-status-on' }}">{{ $stockStatus }}</span></td></tr>
                 @empty <tr><td colspan="4">Belum ada barang aktif di katalog.</td></tr> @endforelse
             </tbody></table></div>
             {{ $products->links() }}
         </section>
     </div>
     <section class="catalog-panel movement-history"><div class="catalog-panel-heading"><div><h2>Riwayat pergerakan stok</h2><p>Perubahan stok terbaru beserta pengguna yang mencatat.</p></div></div>
-        <div class="table-scroll"><table class="catalog-table"><thead><tr><th>Waktu</th><th>Barang</th><th>Jenis</th><th>Perubahan</th><th>Saldo setelah</th><th>Pengguna</th><th>Catatan</th></tr></thead><tbody>
-            @forelse ($movements as $movement)<tr wire:key="movement-{{ $movement->id }}"><td>{{ $movement->created_at->timezone('Asia/Jakarta')->format('d/m/Y H:i') }}</td><td>{{ $movement->product->name }}</td><td>{{ ['in' => 'Masuk', 'out' => 'Keluar', 'adjustment' => 'Penyesuaian', 'sale' => 'Penjualan', 'custom_order_ready' => 'Pesanan custom siap', 'custom_order_delivery' => 'Pesanan custom diserahkan'][$movement->movement_type] ?? $movement->movement_type }}<small class="table-subtext">{{ $movement->inventory_type === 'material' ? 'Bahan baku' : 'Barang jadi' }}</small></td><td>{{ number_format($movement->quantity, 3, ',', '.') }}</td><td>{{ number_format($movement->balance_after, 3, ',', '.') }}</td><td>{{ $movement->user->name }}</td><td>{{ $movement->reference ?: $movement->notes ?: '—' }}</td></tr>
+        <div class="table-scroll"><table class="catalog-table"><thead><tr><th>Waktu</th><th>Barang</th><th>Jenis</th><th>Stok sebelum</th><th>Perubahan</th><th>Stok sesudah</th><th>Pengguna</th><th>Alasan</th></tr></thead><tbody>
+            @forelse ($movements as $movement)@php($movementUnit = $movement->product->pricing_method === 'weight' ? 'kg' : $movement->product->unit->abbreviation)<tr wire:key="movement-{{ $movement->id }}"><td>{{ $movement->created_at->timezone('Asia/Jakarta')->format('d/m/Y H:i') }}</td><td>{{ $movement->product->name }}</td><td>{{ ['in' => 'Masuk', 'out' => 'Keluar', 'adjustment' => 'Penyesuaian', 'sale' => 'Penjualan', 'custom_order_ready' => 'Pesanan custom siap', 'custom_order_delivery' => 'Pesanan custom diserahkan'][$movement->movement_type] ?? $movement->movement_type }}<small class="table-subtext">{{ $movement->inventory_type === 'material' ? 'Bahan baku' : 'Barang jadi' }}</small></td><td>{{ number_format((float) $movement->balance_after - (float) $movement->quantity, 3, ',', '.') }} {{ $movementUnit }}</td><td>{{ $movement->quantity > 0 ? '+' : '' }}{{ number_format($movement->quantity, 3, ',', '.') }} {{ $movementUnit }}</td><td>{{ number_format($movement->balance_after, 3, ',', '.') }} {{ $movementUnit }}</td><td>{{ $movement->user->name }}</td><td>{{ $movement->reference ?: $movement->notes ?: '—' }}</td></tr>
             @empty <tr><td colspan="7">Belum ada perubahan stok tercatat.</td></tr> @endforelse
         </tbody></table></div>{{ $movements->links() }}
     </section>

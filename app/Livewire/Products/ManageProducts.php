@@ -8,6 +8,8 @@ use App\Models\InventoryLevel;
 use App\Models\Product;
 use App\Models\ProductSpecification;
 use App\Models\ProductSpecificationValue;
+use App\Models\ProductVariant;
+use App\Models\StockMovement;
 use App\Models\Unit;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -49,17 +51,27 @@ class ManageProducts extends Component
 
     public string $currentImagePath = '';
 
+    public bool $removeCurrentImage = false;
+
     public string $purchasePrice = '0';
 
     public string $sellingPrice = '0';
 
     public string $minimumStock = '0';
 
+    public string $stockQuantity = '0';
+
+    public bool $stockQuantityChanged = false;
+
     public bool $isActive = true;
 
     public array $specificationValues = [];
 
+    public array $variants = [];
+
     public ?int $editingProductId = null;
+
+    public ?int $detailsProductId = null;
 
     public bool $showForm = false;
 
@@ -81,6 +93,12 @@ class ManageProducts extends Component
     public function updatedCategoryId(): void
     {
         $this->specificationValues = [];
+        $this->variants = [];
+    }
+
+    public function updatedStockQuantity(): void
+    {
+        $this->stockQuantityChanged = true;
     }
 
     public function create(): void
@@ -91,7 +109,7 @@ class ManageProducts extends Component
 
     public function edit(Product $product): void
     {
-        $product->load('specificationValues');
+        $product->load(['specificationValues', 'variants']);
 
         $this->editingProductId = $product->id;
         $this->sku = $product->sku;
@@ -105,12 +123,52 @@ class ManageProducts extends Component
         $this->description = $product->description ?? '';
         $this->photo = null;
         $this->currentImagePath = $product->image_path ?? '';
+        $this->removeCurrentImage = false;
         $this->purchasePrice = $product->purchase_price;
         $this->sellingPrice = $product->selling_price;
         $this->minimumStock = $product->minimum_stock;
+        $this->stockQuantity = (string) ($product->inventoryLevels()->where('inventory_type', 'finished')->value('quantity') ?? 0);
+        $this->stockQuantityChanged = false;
         $this->isActive = $product->is_active;
         $this->specificationValues = $product->specificationValues->pluck('value', 'product_specification_id')->all();
+        $this->variants = $product->variants->map(fn (ProductVariant $variant): array => [
+            'id' => $variant->id,
+            'specifications' => $variant->specifications,
+            'selling_price' => (string) $variant->selling_price,
+            'is_active' => $variant->is_active,
+        ])->all();
         $this->showForm = true;
+    }
+
+    public function addVariant(): void
+    {
+        $specifications = ProductSpecification::query()
+            ->where('category_id', $this->categoryId)
+            ->whereNotNull('options')
+            ->orderBy('sort_order')
+            ->get();
+
+        if ($specifications->isEmpty()) {
+            $this->addError('variants', 'Atur pilihan ukuran standar pada halaman Kategori terlebih dahulu.');
+
+            return;
+        }
+
+        $this->variants[] = [
+            'id' => null,
+            'specifications' => $specifications->mapWithKeys(fn (ProductSpecification $specification): array => [
+                $specification->key => $specification->options[0] ?? '',
+            ])->all(),
+            'selling_price' => '',
+            'is_active' => true,
+        ];
+        $this->resetValidation('variants');
+    }
+
+    public function removeVariant(int $index): void
+    {
+        unset($this->variants[$index]);
+        $this->variants = array_values($this->variants);
     }
 
     public function save(): void
@@ -130,8 +188,10 @@ class ManageProducts extends Component
             'purchasePrice' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'sellingPrice' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
             'minimumStock' => ['required', 'numeric', 'min:0', 'max:999999999999.999'],
+            'stockQuantity' => ['required', 'numeric', 'decimal:0,3', 'min:0', 'max:999999999999.999'],
             'isActive' => ['boolean'],
             'specificationValues' => ['array'],
+            'variants' => ['array', 'max:100'],
         ];
 
         $specifications = ProductSpecification::query()
@@ -152,6 +212,21 @@ class ManageProducts extends Component
             ];
         }
 
+        $variantSpecifications = $specifications->filter(fn (ProductSpecification $specification): bool => filled($specification->options));
+
+        foreach ($this->variants as $index => $variant) {
+            $rules['variants.'.$index.'.id'] = ['nullable', 'integer'];
+            $rules['variants.'.$index.'.specifications'] = ['required', 'array'];
+            $rules['variants.'.$index.'.selling_price'] = ['required', 'numeric', 'min:0', 'max:9999999999999.99'];
+            $rules['variants.'.$index.'.is_active'] = ['required', 'boolean'];
+
+            foreach ($variantSpecifications as $specification) {
+                $rules['variants.'.$index.'.specifications.'.$specification->key] = [
+                    'required', 'string', Rule::in($specification->options),
+                ];
+            }
+        }
+
         $validated = $this->validate($rules, [
             'sku.required' => 'Kode barang wajib diisi.',
             'sku.unique' => 'Kode barang sudah digunakan.',
@@ -170,12 +245,40 @@ class ManageProducts extends Component
             throw ValidationException::withMessages(['specificationValues' => 'Spesifikasi tidak sesuai kategori yang dipilih.']);
         }
 
+        foreach ($specifications as $specification) {
+            $value = $validated['specificationValues'][$specification->id] ?? null;
+
+            if (filled($value) && filled($specification->options) && ! $specification->allow_custom && ! in_array((string) $value, $specification->options, true)) {
+                throw ValidationException::withMessages(['specificationValues.'.$specification->id => 'Pilih nilai yang tersedia untuk '.$specification->name.'.']);
+            }
+        }
+
+        if ($this->variants !== [] && $variantSpecifications->isEmpty()) {
+            throw ValidationException::withMessages(['variants' => 'Kategori ini belum memiliki pilihan standar untuk harga variasi.']);
+        }
+
+        $variantCombinations = [];
+
+        foreach ($validated['variants'] ?? [] as $index => $variant) {
+            $combination = collect($variant['specifications'] ?? [])
+                ->only($variantSpecifications->pluck('key')->all())
+                ->sortKeys()
+                ->all();
+            $combinationKey = json_encode($combination, JSON_THROW_ON_ERROR);
+
+            if (count($combination) !== $variantSpecifications->count() || in_array($combinationKey, $variantCombinations, true)) {
+                throw ValidationException::withMessages(['variants.'.$index.'.specifications' => 'Setiap kombinasi ukuran harus lengkap dan unik.']);
+            }
+
+            $variantCombinations[] = $combinationKey;
+        }
+
         $previousImagePath = $this->editingProductId
             ? Product::query()->whereKey($this->editingProductId)->value('image_path')
             : null;
         $newImagePath = $this->photo?->store('products', 'public');
 
-        DB::transaction(function () use ($validated, $specifications, $newImagePath): void {
+        DB::transaction(function () use ($validated, $specifications, $variantSpecifications, $newImagePath): void {
             $brand = filled($validated['brandName'])
                 ? Brand::firstOrCreate(['name' => trim($validated['brandName'])], ['is_active' => true])
                 : null;
@@ -204,11 +307,36 @@ class ManageProducts extends Component
 
             if ($newImagePath !== null) {
                 $product->update(['image_path' => $newImagePath]);
+            } elseif ($this->removeCurrentImage) {
+                $product->update(['image_path' => null]);
             }
-            InventoryLevel::firstOrCreate(
+            $stock = InventoryLevel::firstOrCreate(
                 ['product_id' => $product->id, 'inventory_type' => 'finished'],
                 ['quantity' => 0],
             );
+
+            if ($this->editingProductId === null || $this->stockQuantityChanged) {
+                $stock = InventoryLevel::query()->whereKey($stock->id)->lockForUpdate()->firstOrFail();
+                $newBalance = (float) $validated['stockQuantity'];
+                $stockDelta = round($newBalance - (float) $stock->quantity, 3);
+
+                if ($newBalance < 0) {
+                    throw ValidationException::withMessages(['stockQuantity' => 'Stok tidak boleh menjadi negatif.']);
+                }
+
+                if ($stockDelta !== 0.0) {
+                    $stock->update(['quantity' => $newBalance]);
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'user_id' => auth()->id(),
+                        'movement_type' => 'adjustment',
+                        'quantity' => $stockDelta,
+                        'balance_after' => $newBalance,
+                        'inventory_type' => 'finished',
+                        'notes' => $this->editingProductId === null ? 'Stok awal produk' : 'Penyesuaian stok melalui Data Barang',
+                    ]);
+                }
+            }
             $product->units()->sync([$product->unit_id => ['conversion_factor' => '1.000000', 'is_base' => true]]);
 
             $product->specificationValues()->delete();
@@ -224,9 +352,31 @@ class ManageProducts extends Component
                     ]);
                 }
             }
+
+            $savedVariantIds = [];
+
+            foreach ($validated['variants'] ?? [] as $variantData) {
+                $variantAttributes = [
+                    'specifications' => collect($variantData['specifications'])
+                        ->only($variantSpecifications->pluck('key')->all())
+                        ->sortKeys()
+                        ->all(),
+                    'selling_price' => $variantData['selling_price'],
+                    'is_active' => $variantData['is_active'],
+                ];
+
+                $variant = filled($variantData['id'] ?? null)
+                    ? $product->variants()->findOrFail($variantData['id'])
+                    : new ProductVariant(['product_id' => $product->id]);
+
+                $variant->fill($variantAttributes)->save();
+                $savedVariantIds[] = $variant->id;
+            }
+
+            $product->variants()->when($savedVariantIds !== [], fn ($query) => $query->whereNotIn('id', $savedVariantIds))->delete();
         });
 
-        if ($newImagePath !== null && $previousImagePath !== null) {
+        if (($newImagePath !== null || $this->removeCurrentImage) && $previousImagePath !== null) {
             Storage::disk('public')->delete($previousImagePath);
         }
 
@@ -240,24 +390,45 @@ class ManageProducts extends Component
         session()->flash('status', 'Barang diarsipkan dan tidak lagi muncul di katalog aktif.');
     }
 
+    public function viewDetails(Product $product): void
+    {
+        $this->detailsProductId = $product->id;
+    }
+
+    public function closeDetails(): void
+    {
+        $this->detailsProductId = null;
+    }
+
     public function cancel(): void
     {
         $this->resetForm();
+    }
+
+    public function removeCurrentPhoto(): void
+    {
+        $this->photo = null;
+        $this->currentImagePath = '';
+        $this->removeCurrentImage = true;
     }
 
     private function resetForm(): void
     {
         $this->reset(
             'sku', 'barcode', 'name', 'brandName', 'categoryId', 'unitId', 'description',
-            'purchasePrice', 'sellingPrice', 'minimumStock', 'specificationValues', 'editingProductId',
+            'purchasePrice', 'sellingPrice', 'minimumStock', 'specificationValues', 'variants', 'editingProductId',
+            'stockQuantity', 'stockQuantityChanged',
         );
         $this->photo = null;
         $this->currentImagePath = '';
+        $this->removeCurrentImage = false;
         $this->productType = 'general';
         $this->pricingMethod = 'unit';
         $this->purchasePrice = '0';
         $this->sellingPrice = '0';
         $this->minimumStock = '0';
+        $this->stockQuantity = '0';
+        $this->stockQuantityChanged = false;
         $this->isActive = true;
         $this->showForm = false;
         $this->resetValidation();
@@ -267,7 +438,7 @@ class ManageProducts extends Component
     {
         return view('livewire.products.manage-products', [
             'products' => Product::query()
-                ->with(['category', 'brand', 'unit', 'specificationValues.specification'])
+                ->with(['category', 'brand', 'unit', 'inventoryLevels', 'specificationValues.specification'])
                 ->when($this->search, fn ($query) => $query->where(fn ($query) => $query
                     ->where('name', 'like', '%'.$this->search.'%')
                     ->orWhere('sku', 'like', '%'.$this->search.'%')
@@ -285,6 +456,15 @@ class ManageProducts extends Component
                 ->get(),
             'specifications' => $this->categoryId
                 ? ProductSpecification::where('category_id', $this->categoryId)->orderBy('sort_order')->get()
+                : collect(),
+            'variantSpecifications' => $this->categoryId
+                ? ProductSpecification::where('category_id', $this->categoryId)->whereNotNull('options')->orderBy('sort_order')->get()
+                : collect(),
+            'detailsProduct' => $this->detailsProductId
+                ? Product::query()->with(['category', 'brand', 'unit', 'specificationValues.specification', 'inventoryLevels'])->find($this->detailsProductId)
+                : null,
+            'detailMovements' => $this->detailsProductId
+                ? StockMovement::query()->with('user')->where('product_id', $this->detailsProductId)->latest()->limit(8)->get()
                 : collect(),
         ]);
     }

@@ -90,7 +90,21 @@ class ManageInventory extends Component
 
     public function render(): View
     {
+        $stockSummary = Product::query()
+            ->leftJoin('inventory_levels as finished_stock', function ($join): void {
+                $join->on('finished_stock.product_id', '=', 'products.id')
+                    ->where('finished_stock.inventory_type', '=', 'finished');
+            })
+            ->where('products.is_active', true)
+            ->whereNull('products.deleted_at')
+            ->selectRaw('COUNT(products.id) AS product_count')
+            ->selectRaw('SUM(CASE WHEN COALESCE(finished_stock.quantity, 0) = 0 THEN 1 ELSE 0 END) AS out_of_stock_count')
+            ->selectRaw('SUM(CASE WHEN COALESCE(finished_stock.quantity, 0) > 0 AND finished_stock.quantity <= products.minimum_stock THEN 1 ELSE 0 END) AS low_stock_count')
+            ->selectRaw('SUM(CASE WHEN finished_stock.quantity > products.minimum_stock THEN 1 ELSE 0 END) AS available_stock_count')
+            ->first();
+
         return view('livewire.inventory.manage-inventory', [
+            'stockSummary' => $stockSummary,
             'products' => Product::query()
                 ->with(['unit', 'inventoryLevels'])
                 ->where('is_active', true)
@@ -100,7 +114,7 @@ class ManageInventory extends Component
                 ->orderBy('name')
                 ->paginate(15),
             'movementProducts' => Product::query()->with('unit')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'unit_id', 'pricing_method']),
-            'movements' => StockMovement::query()->with(['product', 'user'])->latest()->paginate(12),
+            'movements' => StockMovement::query()->with(['product.unit', 'user'])->latest()->paginate(12),
         ]);
     }
 }

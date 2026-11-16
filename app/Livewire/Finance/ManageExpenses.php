@@ -19,6 +19,8 @@ class ManageExpenses extends Component
 
     public string $expenseDate = '';
 
+    public ?int $editingExpenseId = null;
+
     public function mount(): void
     {
         $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
@@ -27,6 +29,15 @@ class ManageExpenses extends Component
     public function boot(): void
     {
         abort_unless(auth()->check(), 403);
+    }
+
+    public function edit(Expense $expense): void
+    {
+        $this->editingExpenseId = $expense->id;
+        $this->category = $expense->category;
+        $this->description = $expense->description;
+        $this->amount = (string) $expense->amount;
+        $this->expenseDate = $expense->expense_date->toDateString();
     }
 
     public function save(): void
@@ -42,23 +53,35 @@ class ManageExpenses extends Component
             'amount.gt' => 'Jumlah pengeluaran harus lebih dari nol.',
         ]);
 
-        Expense::create([
-            'user_id' => auth()->id(),
+        $expense = $this->editingExpenseId ? Expense::query()->findOrFail($this->editingExpenseId) : new Expense(['user_id' => auth()->id()]);
+        $expense->fill([
             'category' => trim($validated['category']),
             'description' => trim($validated['description']),
             'amount' => $validated['amount'],
             'expense_date' => $validated['expenseDate'],
-        ]);
+        ])->save();
 
-        $this->reset(['category', 'description', 'amount']);
+        $wasEditing = $this->editingExpenseId !== null;
+        $this->reset(['category', 'description', 'amount', 'editingExpenseId']);
         $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
-        session()->flash('status', 'Pengeluaran berhasil dicatat.');
+        session()->flash('status', $wasEditing ? 'Pengeluaran berhasil diperbarui.' : 'Pengeluaran berhasil dicatat.');
     }
 
     public function delete(Expense $expense): void
     {
         $expense->delete();
+        if ($this->editingExpenseId === $expense->id) {
+            $this->reset(['category', 'description', 'amount', 'editingExpenseId']);
+            $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
+        }
         session()->flash('status', 'Catatan pengeluaran dihapus.');
+    }
+
+    public function cancelEdit(): void
+    {
+        $this->reset(['category', 'description', 'amount', 'editingExpenseId']);
+        $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
+        $this->resetValidation();
     }
 
     public function render(): View

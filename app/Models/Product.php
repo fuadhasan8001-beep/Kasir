@@ -55,6 +55,11 @@ class Product extends Model
         return $this->hasMany(ProductSpecificationValue::class);
     }
 
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
+    }
+
     public function inventoryLevels(): HasMany
     {
         return $this->hasMany(InventoryLevel::class);

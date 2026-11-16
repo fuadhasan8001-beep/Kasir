@@ -3,18 +3,8 @@
         <div class="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800">{{ session('status') }}</div>
     @endif
 
-    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
-            <section class="catalog-panel">
-                <div class="catalog-panel-heading"><div><h2>{{ $editingCategoryId ? 'Ubah kategori' : 'Tambah kategori' }}</h2><p>Kelompokkan material dan produk konstruksi.</p></div></div>
-                <form wire:submit="saveCategory" class="catalog-form">
-                    <label>Nama kategori<input wire:model="name" type="text" maxlength="120" placeholder="Contoh: Besi Konstruksi">@error('name')<small>{{ $message }}</small>@enderror</label>
-                    <label>Deskripsi<textarea wire:model="description" rows="3" placeholder="Keterangan singkat (opsional)"></textarea>@error('description')<small>{{ $message }}</small>@enderror</label>
-                    <div class="flex gap-2"><button class="button-primary" type="submit">{{ $editingCategoryId ? 'Simpan perubahan' : 'Simpan kategori' }}</button>@if($editingCategoryId)<button class="button-secondary" wire:click="cancelCategoryEdit" type="button">Batal</button>@endif</div>
-                </form>
-            </section>
-
+    <div class="catalog-panel-heading category-page-heading"><div><h2>Daftar kategori</h2><p>Atur kategori dan buka atribut hanya saat dibutuhkan.</p></div><button class="button-primary" wire:click="createCategory" type="button">+ Tambah kategori</button></div>
         <section class="catalog-panel">
-            <div class="catalog-panel-heading"><div><h2>Daftar kategori</h2><p>Kategori menjadi templat atribut produk.</p></div></div>
             <input class="catalog-input mb-4" wire:model.live.debounce.300ms="search" type="search" placeholder="Cari kategori...">
             @error('category')<p class="catalog-error mb-3">{{ $message }}</p>@enderror
             <div class="divide-y divide-neutral-100">
@@ -33,7 +23,18 @@
             </div>
             <div class="mt-4">{{ $categories->links() }}</div>
         </section>
-    </div>
+    @if($showCategoryForm)
+        <div class="catalog-modal-backdrop" wire:click.self="cancelCategoryEdit">
+            <section class="catalog-modal category-form-modal" role="dialog" aria-modal="true" aria-labelledby="category-form-title">
+                <div class="catalog-panel-heading"><div><h2 id="category-form-title">{{ $editingCategoryId ? 'Ubah kategori' : 'Tambah kategori' }}</h2><p>Kelompokkan material dan produk konstruksi.</p></div><button class="button-secondary button-small" wire:click="cancelCategoryEdit" type="button">Tutup</button></div>
+                <form wire:submit="saveCategory" class="catalog-form">
+                    <label>Nama kategori<input wire:model="name" type="text" maxlength="120" placeholder="Contoh: Besi Konstruksi">@error('name')<small>{{ $message }}</small>@enderror</label>
+                    <label>Deskripsi<textarea wire:model="description" rows="3" placeholder="Keterangan singkat (opsional)"></textarea>@error('description')<small>{{ $message }}</small>@enderror</label>
+                    <div class="flex gap-2"><button class="button-primary" type="submit">{{ $editingCategoryId ? 'Simpan perubahan' : 'Simpan kategori' }}</button><button class="button-secondary" wire:click="cancelCategoryEdit" type="button">Batal</button></div>
+                </form>
+            </section>
+        </div>
+    @endif
 
     @if ($selectedCategory)
         <section class="catalog-panel">
@@ -42,7 +43,7 @@
             <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)]">
                 <div class="divide-y divide-neutral-100">
                     @forelse ($selectedCategory->specifications as $specification)
-                        <div class="flex flex-wrap items-center justify-between gap-3 py-3" wire:key="spec-{{ $specification->id }}"><div><strong class="text-sm">{{ $specification->name }}</strong><span class="ml-2 text-xs text-neutral-500">{{ $specification->data_type }}{{ $specification->measurement_unit ? ' · '.$specification->measurement_unit : '' }}{{ $specification->is_required ? ' · wajib' : '' }}</span></div><div class="flex gap-2"><button class="button-secondary button-small" wire:click="editSpecification({{ $specification->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="deleteSpecification({{ $specification->id }})" wire:confirm="Hapus atribut {{ $specification->name }}?" type="button">Hapus</button></div></div>
+                        <div class="flex flex-wrap items-center justify-between gap-3 py-3" wire:key="spec-{{ $specification->id }}"><div><strong class="text-sm">{{ $specification->name }}</strong><span class="ml-2 text-xs text-neutral-500">{{ $specification->data_type }}{{ $specification->measurement_unit ? ' · '.$specification->measurement_unit : '' }}{{ $specification->is_required ? ' · wajib' : '' }}{{ $specification->allow_custom ? ' · ukuran custom aktif' : '' }}</span>@if($specification->options)<small class="block mt-1 text-xs text-neutral-500">Pilihan: {{ implode(', ', $specification->options) }}</small>@endif</div><div class="flex gap-2"><button class="button-secondary button-small" wire:click="editSpecification({{ $specification->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="deleteSpecification({{ $specification->id }})" wire:confirm="Hapus atribut {{ $specification->name }}?" type="button">Hapus</button></div></div>
                     @empty
                         <div class="py-7 text-center text-sm text-neutral-500">Belum ada atribut khusus.</div>
                     @endforelse
@@ -52,7 +53,9 @@
                         <label>Nama atribut<input wire:model="specificationName" type="text" placeholder="Contoh: Diameter besi">@error('specificationName')<small>{{ $message }}</small>@enderror</label>
                         <label>Kode atribut<input wire:model="specificationKey" type="text" placeholder="diameter_besi">@error('specificationKey')<small>{{ $message }}</small>@enderror</label>
                         <div class="grid grid-cols-2 gap-3"><label>Jenis data<select wire:model="specificationType"><option value="text">Teks</option><option value="number">Angka desimal</option><option value="integer">Bilangan bulat</option><option value="boolean">Ya / tidak</option></select>@error('specificationType')<small>{{ $message }}</small>@enderror</label><label>Satuan ukur<input wire:model="measurementUnit" type="text" placeholder="mm, cm, kg">@error('measurementUnit')<small>{{ $message }}</small>@enderror</label></div>
+                        <label>Pilihan ukuran standar<textarea wire:model="specificationOptions" rows="5" placeholder="Satu pilihan per baris, misalnya:&#10;Ø8 mm&#10;Ø10 mm&#10;Ø12 mm">{{ $specificationOptions }}</textarea><small>Opsional. Daftar ini langsung dipakai di modal Kasir.</small>@error('specificationOptions')<small>{{ $message }}</small>@enderror</label>
                         <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationRequired" type="checkbox">Wajib diisi saat membuat produk</label>
+                        <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationAllowCustom" type="checkbox">Izinkan ukuran custom yang diketik manual di Kasir</label>
                         @error('specificationCategoryId')<small class="catalog-error">{{ $message }}</small>@enderror
                         <div class="flex gap-2"><button class="button-primary" type="submit">Simpan atribut</button>@if($editingSpecificationId)<button class="button-secondary" wire:click="cancelSpecificationEdit" type="button">Batal</button>@endif</div>
                     </form>

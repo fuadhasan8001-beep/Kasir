@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="52" x2="573" y1="22" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAF6"/>
+      <stop offset="1" stop-color="#E9EEE8"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="145" x2="475" y1="112" y2="305" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F6F4"/>
+      <stop offset=".45" stop-color="#AAB4AE"/>
+      <stop offset=".7" stop-color="#E2E7E3"/>
+      <stop offset="1" stop-color="#7D8982"/>
+    </linearGradient>
+    <linearGradient id="green" x1="320" x2="320" y1="250" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C9A68" stop-opacity=".26"/>
+      <stop offset="1" stop-color="#6C9A68" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="420" rx="24" fill="url(#bg)"/>
+  <path d="M74 340c52-30 115-45 190-45 89 0 157 19 212 43 31 14 59 15 90 2v38H74v-38Z" fill="url(#green)"/>
+  <g stroke="#7D8982" stroke-linecap="round" stroke-linejoin="round" stroke-width="10">
+    <path d="m158 148 288-43 57 31-287 48-58-36Z" fill="url(#steel)"/>
+    <path d="m158 148 4 119 55 36-1-119" fill="#AEB8B1"/>
+    <path d="m216 184 287-48 1 117-288 50" fill="url(#steel)"/>
+    <path d="m216 184 1 117"/>
+    <path d="m273 174 2 117m56-127 1 117m57-127 2 117m56-127 1 117" stroke="#AAB4AE" stroke-width="5"/>
+    <path d="m146 227 288-46 58 32-287 50-59-36Z" fill="url(#steel)"/>
+    <path d="m146 227 3 82 56 34-1-81" fill="#AEB8B1"/>
+    <path d="m204 261 288-48 1 83-289 47" fill="url(#steel)"/>
+    <path d="m204 261 1 84"/>
+  </g>
+  <path d="M94 365h452" stroke="#D5DDD5" stroke-width="3"/>
+</svg>

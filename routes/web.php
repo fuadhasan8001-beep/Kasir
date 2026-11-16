@@ -15,6 +15,8 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->midd
 Route::middleware('auth')->group(function () {
     Route::view('/dashboard', 'dashboard')->name('dashboard');
     Route::view('/kasir', 'sales.create')->name('kasir');
+    Route::view('/kasir/keranjang', 'sales.cart')->name('kasir.cart');
+    Route::view('/laporan', 'reports.index')->name('reports.index');
     Route::view('/catatan', 'inventory.index')->name('catatan');
     Route::view('/riwayat', 'sales.index')->name('riwayat');
     Route::view('/sales/create', 'sales.create')->name('sales.create');

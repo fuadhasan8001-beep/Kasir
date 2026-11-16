@@ -23,6 +23,8 @@ class ManageCategories extends Component
 
     public ?int $editingCategoryId = null;
 
+    public bool $showCategoryForm = false;
+
     public ?int $specificationCategoryId = null;
 
     public string $specificationName = '';
@@ -32,6 +34,10 @@ class ManageCategories extends Component
     public string $specificationType = 'text';
 
     public string $measurementUnit = '';
+
+    public string $specificationOptions = '';
+
+    public bool $specificationAllowCustom = false;
 
     public bool $specificationRequired = false;
 
@@ -52,6 +58,13 @@ class ManageCategories extends Component
         $this->editingCategoryId = $category->id;
         $this->name = $category->name;
         $this->description = $category->description ?? '';
+        $this->showCategoryForm = true;
+    }
+
+    public function createCategory(): void
+    {
+        $this->resetCategoryForm();
+        $this->showCategoryForm = true;
     }
 
     public function saveCategory(): void
@@ -110,6 +123,8 @@ class ManageCategories extends Component
         $this->specificationKey = $specification->key;
         $this->specificationType = $specification->data_type;
         $this->measurementUnit = $specification->measurement_unit ?? '';
+        $this->specificationOptions = implode("\n", $specification->options ?? []);
+        $this->specificationAllowCustom = $specification->allow_custom;
         $this->specificationRequired = $specification->is_required;
     }
 
@@ -123,6 +138,8 @@ class ManageCategories extends Component
             'specificationKey' => ['required', 'alpha_dash:ascii', 'max:80'],
             'specificationType' => ['required', Rule::in(['text', 'number', 'integer', 'boolean'])],
             'measurementUnit' => ['nullable', 'string', 'max:32'],
+            'specificationOptions' => ['nullable', 'string', 'max:5000'],
+            'specificationAllowCustom' => ['boolean'],
             'specificationRequired' => ['boolean'],
         ], [
             'specificationName.required' => 'Nama spesifikasi wajib diisi.',
@@ -139,6 +156,16 @@ class ManageCategories extends Component
             throw ValidationException::withMessages(['specificationKey' => 'Kode spesifikasi sudah digunakan pada kategori ini.']);
         }
 
+        $options = collect(preg_split('/\r\n|\r|\n/', $validated['specificationOptions'] ?? '') ?: [])
+            ->map(fn (string $option): string => trim($option))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($options->count() > 100 || $options->contains(fn (string $option): bool => mb_strlen($option) > 120)) {
+            throw ValidationException::withMessages(['specificationOptions' => 'Gunakan maksimal 100 pilihan dan batasi setiap pilihan hingga 120 karakter.']);
+        }
+
         ProductSpecification::updateOrCreate(
             ['id' => $this->editingSpecificationId],
             [
@@ -147,6 +174,8 @@ class ManageCategories extends Component
                 'key' => $validated['specificationKey'],
                 'data_type' => $validated['specificationType'],
                 'measurement_unit' => $validated['measurementUnit'] ?: null,
+                'options' => $options->isNotEmpty() ? $options->all() : null,
+                'allow_custom' => $validated['specificationAllowCustom'],
                 'is_required' => $validated['specificationRequired'],
             ],
         );
@@ -179,12 +208,13 @@ class ManageCategories extends Component
     private function resetCategoryForm(): void
     {
         $this->reset('name', 'description', 'editingCategoryId');
+        $this->showCategoryForm = false;
         $this->resetValidation();
     }
 
     private function resetSpecificationForm(): void
     {
-        $this->reset('specificationName', 'specificationKey', 'specificationType', 'measurementUnit', 'specificationRequired');
+        $this->reset('specificationName', 'specificationKey', 'specificationType', 'measurementUnit', 'specificationOptions', 'specificationAllowCustom', 'specificationRequired');
         $this->specificationType = 'text';
         $this->editingSpecificationId = null;
         $this->resetValidation();
