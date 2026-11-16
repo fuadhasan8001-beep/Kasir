@@ -37,17 +37,18 @@
     @endif
 
     @if ($selectedCategory)
-        <section class="catalog-panel">
-            <div class="catalog-panel-heading"><div><h2>Atribut · {{ $selectedCategory->name }}</h2><p>Gunakan atribut berbeda untuk kebutuhan tiap jenis produk.</p></div><button class="button-secondary button-small" wire:click="$set('specificationCategoryId', null)" type="button">Tutup</button></div>
-            @error('specification')<p class="catalog-error mb-3">{{ $message }}</p>@enderror
-            <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)]">
-                <div class="divide-y divide-neutral-100">
-                    @forelse ($selectedCategory->specifications as $specification)
-                        <div class="flex flex-wrap items-center justify-between gap-3 py-3" wire:key="spec-{{ $specification->id }}"><div><strong class="text-sm">{{ $specification->name }}</strong><span class="ml-2 text-xs text-neutral-500">{{ $specification->data_type }}{{ $specification->measurement_unit ? ' · '.$specification->measurement_unit : '' }}{{ $specification->is_required ? ' · wajib' : '' }}{{ $specification->allow_custom ? ' · ukuran custom aktif' : '' }}</span>@if($specification->options)<small class="block mt-1 text-xs text-neutral-500">Pilihan: {{ implode(', ', $specification->options) }}</small>@endif</div><div class="flex gap-2"><button class="button-secondary button-small" wire:click="editSpecification({{ $specification->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="deleteSpecification({{ $specification->id }})" wire:confirm="Hapus atribut {{ $specification->name }}?" type="button">Hapus</button></div></div>
-                    @empty
-                        <div class="py-7 text-center text-sm text-neutral-500">Belum ada atribut khusus.</div>
-                    @endforelse
-                </div>
+        <div class="catalog-modal-backdrop" wire:click.self="$set('specificationCategoryId', null)">
+            <section class="catalog-modal category-specifications-modal" role="dialog" aria-modal="true" aria-labelledby="category-specifications-title">
+                <div class="catalog-panel-heading"><div><h2 id="category-specifications-title">Atribut · {{ $selectedCategory->name }}</h2><p>Gunakan atribut berbeda untuk kebutuhan tiap jenis produk.</p></div><button class="button-secondary button-small" wire:click="$set('specificationCategoryId', null)" type="button">Tutup</button></div>
+                @error('specification')<p class="catalog-error mb-3">{{ $message }}</p>@enderror
+                <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)]">
+                    <div class="divide-y divide-neutral-100">
+                        @forelse ($selectedCategory->specifications as $specification)
+                            <div class="flex flex-wrap items-center justify-between gap-3 py-3" wire:key="spec-{{ $specification->id }}"><div><strong class="text-sm">{{ $specification->name }}</strong><span class="ml-2 text-xs text-neutral-500">{{ $specification->data_type }}{{ $specification->measurement_unit ? ' · '.$specification->measurement_unit : '' }}{{ $specification->is_required ? ' · wajib' : '' }}{{ $specification->allow_custom ? ' · ukuran custom aktif' : '' }}</span>@if($specification->options)<small class="block mt-1 text-xs text-neutral-500">Pilihan: {{ implode(', ', $specification->options) }}</small>@endif</div><div class="flex gap-2"><button class="button-secondary button-small" wire:click="editSpecification({{ $specification->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="deleteSpecification({{ $specification->id }})" wire:confirm="Hapus atribut {{ $specification->name }}?" type="button">Hapus</button></div></div>
+                        @empty
+                            <div class="py-7 text-center text-sm text-neutral-500">Belum ada atribut khusus.</div>
+                        @endforelse
+                    </div>
                     <form wire:submit="saveSpecification" class="catalog-form rounded-lg border border-neutral-200 bg-neutral-50 p-4">
                         <h3 class="mb-3 text-sm font-semibold">{{ $editingSpecificationId ? 'Ubah atribut' : 'Tambah atribut' }}</h3>
                         <label>Nama atribut<input wire:model="specificationName" type="text" placeholder="Contoh: Diameter besi">@error('specificationName')<small>{{ $message }}</small>@enderror</label>
@@ -59,7 +60,8 @@
                         @error('specificationCategoryId')<small class="catalog-error">{{ $message }}</small>@enderror
                         <div class="flex gap-2"><button class="button-primary" type="submit">Simpan atribut</button>@if($editingSpecificationId)<button class="button-secondary" wire:click="cancelSpecificationEdit" type="button">Batal</button>@endif</div>
                     </form>
-            </div>
-        </section>
+                </div>
+            </section>
+        </div>
     @endif
 </div>
