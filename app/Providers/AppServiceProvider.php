@@ -21,5 +21,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Blade::directive('rupiah', static fn (string $expression): string => "<?php echo 'Rp '.number_format((float) ($expression), 0, ',', '.'); ?>");
+        Blade::directive('quantity', static fn (string $expression): string => "<?php echo rtrim(rtrim(number_format((float) ($expression), 3, ',', '.'), '0'), ','); ?>");
     }
 }

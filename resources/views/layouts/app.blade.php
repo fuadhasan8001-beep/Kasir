@@ -12,17 +12,129 @@
     <div x-data="{
     mobileMenuOpen: false,
     accountSheetOpen: false,
-    adminDropdownOpen: false,
-    isMobile() {
-        return window.innerWidth <= 1023;
+    bodyScrollState: null,
+    touchStartY: 0,
+    scrollGuard: null,
+    touchStartGuard: null,
+    lockBodyScroll() {
+        if (this.bodyScrollState !== null) {
+            return;
+        }
+
+        const body = document.body;
+        const root = document.documentElement;
+        this.bodyScrollState = {
+            scrollY: window.scrollY,
+            position: body.style.position,
+            top: body.style.top,
+            left: body.style.left,
+            right: body.style.right,
+            width: body.style.width,
+            overflow: body.style.overflow,
+            overscrollBehavior: body.style.overscrollBehavior,
+            rootOverflow: root.style.overflow,
+            rootOverscrollBehavior: root.style.overscrollBehavior,
+        };
+
+        root.style.overflow = 'hidden';
+        root.style.overscrollBehavior = 'none';
+        body.style.position = 'fixed';
+        body.style.top = `-${this.bodyScrollState.scrollY}px`;
+        body.style.left = '0';
+        body.style.right = '0';
+        body.style.width = '100%';
+        body.style.overflow = 'hidden';
+        body.style.overscrollBehavior = 'none';
+    },
+    preventBackgroundScroll(event) {
+        const sidebar = document.querySelector('.sidebar');
+        const menu = sidebar?.querySelector('.sidebar-nav');
+
+        if (!this.mobileMenuOpen || !sidebar || !menu) {
+            return;
+        }
+
+        if (!sidebar.contains(event.target)) {
+            event.preventDefault();
+            return;
+        }
+
+        if (!menu.contains(event.target)) {
+            event.preventDefault();
+            return;
+        }
+
+        const currentTouch = event.type === 'touchmove' ? event.touches[0] : null;
+
+        if (currentTouch) {
+            const delta = this.touchStartY - currentTouch.clientY;
+            const maximumScroll = menu.scrollHeight - menu.clientHeight;
+
+            this.touchStartY = currentTouch.clientY;
+            menu.scrollTop = Math.max(0, Math.min(maximumScroll, menu.scrollTop + delta));
+            event.preventDefault();
+            return;
+        }
+
+        const delta = event.deltaY;
+        const maximumScroll = menu.scrollHeight - menu.clientHeight;
+
+        if ((delta < 0 && menu.scrollTop <= 0) || (delta > 0 && menu.scrollTop >= maximumScroll - 1)) {
+            event.preventDefault();
+        }
+    },
+    updateScrollGuards(isOpen) {
+        if (isOpen) {
+            this.lockBodyScroll();
+            this.scrollGuard = this.scrollGuard ?? ((event) => this.preventBackgroundScroll(event));
+            this.touchStartGuard = this.touchStartGuard ?? ((event) => {
+                if (event.touches.length > 0) {
+                    this.touchStartY = event.touches[0].clientY;
+                }
+            });
+
+            document.addEventListener('wheel', this.scrollGuard, { capture: true, passive: false });
+            document.addEventListener('touchstart', this.touchStartGuard, { capture: true, passive: true });
+            document.addEventListener('touchmove', this.scrollGuard, { capture: true, passive: false });
+            return;
+        }
+
+        if (this.scrollGuard !== null) {
+            document.removeEventListener('wheel', this.scrollGuard, true);
+            document.removeEventListener('touchmove', this.scrollGuard, true);
+            document.removeEventListener('touchstart', this.touchStartGuard, true);
+        }
+
+        this.unlockBodyScroll();
+    },
+    unlockBodyScroll() {
+        if (this.bodyScrollState === null) {
+            return;
+        }
+
+        const body = document.body;
+        const root = document.documentElement;
+        const { scrollY, rootOverflow, rootOverscrollBehavior, ...bodyStyles } = this.bodyScrollState;
+
+        Object.entries(bodyStyles).forEach(([property, value]) => {
+            body.style[property] = value;
+        });
+
+        root.style.overflow = rootOverflow;
+        root.style.overscrollBehavior = rootOverscrollBehavior;
+        this.bodyScrollState = null;
+        const scrollBehavior = root.style.scrollBehavior;
+
+        root.style.scrollBehavior = 'auto';
+        window.scrollTo(0, scrollY);
+        root.style.scrollBehavior = scrollBehavior;
     },
 }" x-on:resize.window="
     if (mobileMenuOpen) mobileMenuOpen = false;
     if (accountSheetOpen) accountSheetOpen = false;
-    if (adminDropdownOpen) adminDropdownOpen = false;
-" x-on:keydown.escape.window="mobileMenuOpen = false; accountSheetOpen = false; adminDropdownOpen = false">
-        <!-- Mobile topbar: visible only on mobile, shows logo + page title -->
-        <header class="topbar topbar-mobile" x-show="isMobile()">
+" x-on:keydown.escape.window="mobileMenuOpen = false; accountSheetOpen = false" x-init="$watch('mobileMenuOpen', (isOpen) => updateScrollGuards(isOpen))">
+        <!-- Mobile topbar: compact brand and navigation controls -->
+        <header class="topbar topbar-mobile">
             <button class="mobile-menu-toggle" type="button" aria-label="Buka menu navigasi" x-on:click="mobileMenuOpen = true">
                 <span></span><span></span><span></span>
             </button>
@@ -30,15 +142,17 @@
                 <img class="brand-logo" src="{{ asset('images/logo-gjs.png') }}" alt="Gunawan Jaya Steel" />
                 <span class="brand-name">Gunawan Jaya Steel</span>
             </div>
-            <h1 class="title">@yield('page-title', 'Kasir')</h1>
         </header>
 
         <!-- Desktop sidebar (shown on desktop) -->
         <aside class="sidebar" x-bind:class="{ 'open': mobileMenuOpen }">
-            <a class="brand" href="{{ route('kasir') }}">
-                <img class="brand-logo" src="{{ asset('images/logo-gjs.png') }}" alt="Gunawan Jaya Steel" />
-                <strong class="brand-name">Gunawan Jaya Steel</strong>
-            </a>
+            <div class="sidebar-brand-row">
+                <a class="brand" href="{{ route('kasir') }}">
+                    <img class="brand-logo" src="{{ asset('images/logo-gjs.png') }}" alt="Gunawan Jaya Steel" />
+                    <strong class="brand-name">Gunawan Jaya Steel</strong>
+                </a>
+                <button class="sidebar-close" type="button" aria-label="Tutup menu navigasi" title="Tutup menu" x-on:click="mobileMenuOpen = false">&times;</button>
+            </div>
             <nav class="sidebar-nav" aria-label="Navigasi utama">
                 <div class="nav-caption">MENU UTAMA</div>
                 <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}">
@@ -51,47 +165,41 @@
                 </a>
                 <a class="nav-item {{ request()->routeIs('riwayat', 'sales.index') ? 'active' : '' }}" href="{{ route('riwayat') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-                    Riwayat Penjualan
+                    Transaksi
+                </a>
+                <a class="nav-item {{ request()->routeIs('orders.*') ? 'active' : '' }}" href="{{ route('orders.custom') }}">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12v8.5"/><path d="M8 5.3 16 10"/></svg>
+                    Pesanan
                 </a>
 
                 <div class="nav-caption">PENGELOLAAN</div>
-                <a class="nav-item {{ request()->routeIs('products.*', 'categories.*', 'units.*') ? 'active' : '' }}" href="{{ route('products.index') }}">
+                <a class="nav-item {{ request()->routeIs('products.*', 'categories.*') ? 'active' : '' }}" href="{{ route('products.index') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 8 9 5 9-5M3 8v10l9 5 9-5V8m-9 5v10"/></svg>
                     Data Barang
                 </a>
                 <div class="sidebar-subnav" aria-label="Pengaturan data barang">
                     <a class="{{ request()->routeIs('categories.*') ? 'active' : '' }}" href="{{ route('categories.index') }}">Kategori</a>
-                    <a class="{{ request()->routeIs('units.*') ? 'active' : '' }}" href="{{ route('units.index') }}">Satuan</a>
                 </div>
                 <a class="nav-item {{ request()->routeIs('inventory.*') ? 'active' : '' }}" href="{{ route('inventory.index') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M4 7h15m0 0-3-3m3 3-3 3M20 17H5m0 0 3 3m-3-3 3-3"/></svg>
                     Inventaris
-                </a>
-                <a class="nav-item {{ request()->routeIs('expenses.*') ? 'active' : '' }}" href="{{ route('expenses.index') }}">
-                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18m-13 5h3"/></svg>
-                    Pengeluaran
                 </a>
                 <a class="nav-item {{ request()->routeIs('reports.*') ? 'active' : '' }}" href="{{ route('reports.index') }}">
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M4 20V10m5 10V4m6 16v-7m5 7V7"/><path d="M2 20h20"/></svg>
                     Laporan
                 </a>
             </nav>
-            <div class="sidebar-bottom" x-on:click.away="adminDropdownOpen = false">
+            <div class="sidebar-bottom">
                 <div class="sidebar-account">
-                    <button class="sidebar-account-toggle" type="button" x-on:click="adminDropdownOpen = !adminDropdownOpen" x-bind:aria-expanded="adminDropdownOpen.toString()" aria-haspopup="menu">
+                    <a class="sidebar-account-toggle" href="{{ route('profile.edit') }}" aria-label="Buka profil {{ auth()->user()->name }}">
                         <span class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
                         <span class="user-chip-detail"><strong>{{ auth()->user()->name }}</strong><small>Administrator</small></span>
-                        <svg class="account-chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="m7 10 5 5 5-5"/></svg>
-                    </button>
-                    <div class="account-dropdown" x-show="adminDropdownOpen" x-transition role="menu">
-                        <a role="menuitem" href="{{ route('profile.edit') }}">Akun Saya</a>
-                        <a role="menuitem" href="{{ route('profile.edit') }}#password">Ubah Password</a>
-                        <form method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin ingin keluar?')">
-                            @csrf
-                            <button role="menuitem" type="submit">Logout</button>
-                        </form>
-                    </div>
+                    </a>
                 </div>
+                <form class="sidebar-logout-form" method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin ingin keluar?')">
+                    @csrf
+                    <button type="submit">Logout</button>
+                </form>
             </div>
         </aside>
 
@@ -122,7 +230,7 @@
         </main>
 
         <!-- Mobile bottom navigation -->
-        <nav class="bottom-nav" x-show="isMobile()">
+        <nav class="bottom-nav">
             <a class="bottom-nav-item {{ request()->routeIs('kasir', 'sales.create') ? 'active' : '' }}" href="{{ route('kasir') }}">
                 <div class="nav-icon">▤</div>
                 <span>Kasir</span>

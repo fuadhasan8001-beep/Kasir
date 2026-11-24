@@ -4,19 +4,19 @@
 
 /* GJS interface tokens */
 :root {
-    --ui-black: #18231d;
+    --ui-black: #171717;
     --ui-white: #FFFFFF;
-    --ui-bg: #f7f8f6;
-    --ui-border: #e4e6df;
-    --ui-secondary: #6f786f;
-    --ui-success: #2e7651;
-    --ui-warning: #c58a32;
+    --ui-bg: #f5f5f4;
+    --ui-border: #e5e5e5;
+    --ui-secondary: #737373;
+    --ui-success: #3f6b50;
+    --ui-warning: #9a7338;
     --ui-error: #b44d3f;
-    --ui-bg-subtle: #f8f8f4;
-    --ui-accent: #b9d97c;
+    --ui-bg-subtle: #fafaf9;
+    --ui-accent: #d4d4d4;
     --ui-panel: #ffffff;
-    --ui-panel-soft: #fbfbf8;
-    --ui-shadow: 0 18px 48px rgb(25 37 29 / 7%);
+    --ui-panel-soft: #fafaf9;
+    --ui-shadow: 0 18px 48px rgb(0 0 0 / 7%);
 }
 
 /* Core typography and base */

@@ -5,6 +5,8 @@ namespace App\Livewire\Categories;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductSpecification;
+use App\Models\ProductVariant;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -166,9 +168,13 @@ class ManageCategories extends Component
             throw ValidationException::withMessages(['specificationOptions' => 'Gunakan maksimal 100 pilihan dan batasi setiap pilihan hingga 120 karakter.']);
         }
 
-        ProductSpecification::updateOrCreate(
-            ['id' => $this->editingSpecificationId],
-            [
+        DB::transaction(function () use ($validated, $options): void {
+            $specification = $this->editingSpecificationId
+                ? ProductSpecification::query()->lockForUpdate()->findOrFail($this->editingSpecificationId)
+                : new ProductSpecification;
+            $previousKey = $specification->exists ? $specification->key : null;
+
+            $specification->fill([
                 'category_id' => $validated['specificationCategoryId'],
                 'name' => $validated['specificationName'],
                 'key' => $validated['specificationKey'],
@@ -177,8 +183,23 @@ class ManageCategories extends Component
                 'options' => $options->isNotEmpty() ? $options->all() : null,
                 'allow_custom' => $validated['specificationAllowCustom'],
                 'is_required' => $validated['specificationRequired'],
-            ],
-        );
+            ])->save();
+
+            if ($previousKey !== null && $previousKey !== $specification->key) {
+                ProductVariant::query()
+                    ->whereHas('product', fn ($query) => $query->where('category_id', $specification->category_id))
+                    ->get()
+                    ->each(function (ProductVariant $variant) use ($previousKey, $specification): void {
+                        $variantSpecifications = $variant->specifications ?? [];
+
+                        if (array_key_exists($previousKey, $variantSpecifications)) {
+                            $variantSpecifications[$specification->key] = $variantSpecifications[$previousKey];
+                            unset($variantSpecifications[$previousKey]);
+                            $variant->update(['specifications' => $variantSpecifications]);
+                        }
+                    });
+            }
+        });
 
         $this->resetSpecificationForm();
         session()->flash('status', 'Spesifikasi berhasil disimpan.');
@@ -187,8 +208,12 @@ class ManageCategories extends Component
     public function deleteSpecification(ProductSpecification $specification): void
     {
 
-        if ($specification->values()->exists()) {
-            throw ValidationException::withMessages(['specification' => 'Spesifikasi yang sudah dipakai produk tidak dapat dihapus.']);
+        $hasProductVariants = ProductVariant::query()
+            ->whereHas('product', fn ($query) => $query->where('category_id', $specification->category_id))
+            ->exists();
+
+        if ($specification->values()->exists() || $hasProductVariants) {
+            throw ValidationException::withMessages(['specification' => 'Spesifikasi yang sudah dipakai produk atau harga variasi tidak dapat dihapus.']);
         }
 
         $specification->delete();

@@ -135,7 +135,7 @@ class CashierCheckoutTest extends TestCase
             ->assertSee('12.500');
     }
 
-    public function test_custom_specification_with_unpriced_variations_requires_admin_configuration(): void
+    public function test_cashier_allows_a_custom_specification_after_the_saved_size_options(): void
     {
         $admin = User::factory()->create();
         $product = Product::factory()->create(['selling_price' => 10000]);
@@ -145,7 +145,7 @@ class CashierCheckoutTest extends TestCase
             'key' => 'ukuran',
             'data_type' => 'text',
             'options' => ['40 cm'],
-            'allow_custom' => true,
+            'allow_custom' => false,
             'is_required' => true,
             'sort_order' => 1,
         ]);
@@ -161,12 +161,13 @@ class CashierCheckoutTest extends TestCase
 
         Livewire::test(PointOfSale::class)
             ->call('addProduct', $product->id)
-            ->set('specificationInputs.ukuran', '__custom__')
+            ->call('selectSizePreset', '__custom__')
             ->set('customSpecificationInputs.ukuran', '55 cm')
             ->set('quantity', '1')
             ->call('addItem')
-            ->assertHasErrors('specificationInputs')
-            ->assertCount('cart', 0);
+            ->assertHasNoErrors()
+            ->assertCount('cart', 1)
+            ->assertSet('cart.0.specification_values', ['ukuran' => '55 cm']);
     }
 
     public function test_custom_product_card_opens_specification_form_before_adding_to_cart(): void

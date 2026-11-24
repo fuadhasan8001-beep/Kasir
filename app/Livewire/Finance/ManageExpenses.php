@@ -64,7 +64,9 @@ class ManageExpenses extends Component
         $wasEditing = $this->editingExpenseId !== null;
         $this->reset(['category', 'description', 'amount', 'editingExpenseId']);
         $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
+        $this->resetPage('expensesPage');
         session()->flash('status', $wasEditing ? 'Pengeluaran berhasil diperbarui.' : 'Pengeluaran berhasil dicatat.');
+        $this->dispatch('expenses-updated');
     }
 
     public function delete(Expense $expense): void
@@ -74,7 +76,9 @@ class ManageExpenses extends Component
             $this->reset(['category', 'description', 'amount', 'editingExpenseId']);
             $this->expenseDate = now()->timezone('Asia/Jakarta')->toDateString();
         }
+        $this->resetPage('expensesPage');
         session()->flash('status', 'Catatan pengeluaran dihapus.');
+        $this->dispatch('expenses-updated');
     }
 
     public function cancelEdit(): void
@@ -87,7 +91,7 @@ class ManageExpenses extends Component
     public function render(): View
     {
         return view('livewire.finance.manage-expenses', [
-            'expenses' => Expense::query()->with('user')->latest('expense_date')->latest('id')->paginate(15),
+            'expenses' => Expense::query()->with('user')->latest('expense_date')->latest('id')->paginate(15, ['*'], 'expensesPage'),
             'categories' => Expense::query()->select('category')->distinct()->orderBy('category')->pluck('category'),
             'totalThisMonth' => Expense::query()->whereMonth('expense_date', now()->month)->whereYear('expense_date', now()->year)->sum('amount'),
         ]);

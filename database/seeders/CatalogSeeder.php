@@ -46,11 +46,11 @@ class CatalogSeeder extends Seeder
                 ['name' => 'Berat per batang', 'type' => 'number', 'unit' => 'kg'],
             ],
             'Begel' => [
-                ['name' => 'Bentuk', 'type' => 'text', 'unit' => null],
-                ['name' => 'Panjang', 'type' => 'number', 'unit' => 'cm'],
-                ['name' => 'Lebar', 'type' => 'number', 'unit' => 'cm'],
-                ['name' => 'Diameter besi', 'type' => 'number', 'unit' => 'mm'],
-                ['name' => 'Berat aktual', 'type' => 'number', 'unit' => 'kg'],
+                ['name' => 'Bentuk', 'type' => 'text', 'unit' => null, 'options' => ['Kotak', 'Persegi panjang', 'Siku', 'U']],
+                ['name' => 'Panjang', 'type' => 'number', 'unit' => 'cm', 'options' => ['10', '12', '15', '20', '25', '30', '35', '40', '50', '60']],
+                ['name' => 'Lebar', 'type' => 'number', 'unit' => 'cm', 'options' => ['10', '12', '15', '20', '25', '30', '35', '40']],
+                ['name' => 'Diameter besi', 'type' => 'number', 'unit' => 'mm', 'options' => ['6', '8', '10', '12']],
+                ['name' => 'Berat aktual', 'type' => 'number', 'unit' => 'kg', 'options' => ['0.5', '1', '1.5', '2', '2.5', '3', '5', '10', '15', '20']],
             ],
             'Sloof' => [
                 ['name' => 'Panjang', 'type' => 'number', 'unit' => 'm'],
@@ -88,16 +88,21 @@ class CatalogSeeder extends Seeder
 
             foreach ($specifications as $sortOrder => $specification) {
                 $key = Str::snake($specification['name']);
-                ProductSpecification::updateOrCreate(
-                    ['category_id' => $category->id, 'key' => $key],
-                    [
-                        'name' => $specification['name'],
-                        'data_type' => $specification['type'],
-                        'measurement_unit' => $specification['unit'],
-                        'is_required' => false,
-                        'sort_order' => $sortOrder,
-                    ],
-                );
+                $productSpecification = ProductSpecification::firstOrNew(['category_id' => $category->id, 'key' => $key]);
+                $attributes = [
+                    'name' => $specification['name'],
+                    'data_type' => $specification['type'],
+                    'measurement_unit' => $specification['unit'],
+                    'is_required' => false,
+                    'sort_order' => $sortOrder,
+                ];
+
+                if (isset($specification['options']) && blank($productSpecification->options)) {
+                    $attributes['options'] = $specification['options'];
+                    $attributes['allow_custom'] = true;
+                }
+
+                $productSpecification->fill($attributes)->save();
             }
         }
     }

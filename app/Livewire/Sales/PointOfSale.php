@@ -50,6 +50,8 @@ class PointOfSale extends Component
 
     public array $customSpecificationInputs = [];
 
+    public string $sizePresetId = '';
+
     public ?string $editingCartKey = null;
 
     public bool $showProductDetails = false;
@@ -114,6 +116,46 @@ class PointOfSale extends Component
         $this->resetValidation();
     }
 
+    public function updatedSizePresetId(string $value): void
+    {
+        $this->resetValidation();
+        $this->orderNotes = '';
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
+
+        if ($this->productId === null || $value === '') {
+            return;
+        }
+
+        $product = Product::query()->with(['category.specifications', 'variants'])->findOrFail($this->productId);
+
+        if ($value === '__custom__') {
+            $this->specificationInputs = $product->category->specifications
+                ->mapWithKeys(fn (ProductSpecification $specification): array => [$specification->key => '__custom__'])
+                ->all();
+
+            return;
+        }
+
+        $variant = $product->variants->firstWhere('id', (int) $value);
+
+        if ($variant === null || ! $variant->is_active) {
+            $this->sizePresetId = '';
+            $this->addError('sizePresetId', 'Pilihan ukuran sudah tidak tersedia.');
+
+            return;
+        }
+
+        $this->specificationInputs = $variant->specifications;
+        $this->resetValidation('sizePresetId');
+    }
+
+    public function selectSizePreset(string $sizePresetId): void
+    {
+        $this->sizePresetId = $sizePresetId;
+        $this->updatedSizePresetId($sizePresetId);
+    }
+
     public function clearProductSelection(): void
     {
         $this->showProductDetails = false;
@@ -125,13 +167,6 @@ class PointOfSale extends Component
     public function addProduct(int $productId): void
     {
         $product = Product::query()->with(['category', 'inventoryLevels'])->where('is_active', true)->findOrFail($productId);
-        $stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0);
-
-        if ($stock <= 0) {
-            $this->addError('product-selection', 'Stok '.$product->name.' sedang habis.');
-
-            return;
-        }
 
         $this->productId = $product->id;
         $this->prepareProductForm($product);
@@ -181,7 +216,7 @@ class PointOfSale extends Component
         $matchedVariant = $this->findMatchingVariant($product, $normalizedSpecifications['values'], $normalizedSpecifications['custom_keys']);
         $unitPrice = $matchedVariant ? (float) $matchedVariant->selling_price : (float) $product->selling_price;
 
-        if ($product->variants->where('is_active', true)->isNotEmpty() && $matchedVariant === null) {
+        if ($product->variants->where('is_active', true)->isNotEmpty() && $matchedVariant === null && $normalizedSpecifications['custom_keys'] === []) {
             $this->addError('specificationInputs', 'Harga variasi ini belum diatur admin. Pilih ukuran standar atau minta admin mengatur harga custom.');
 
             return;
@@ -193,7 +228,7 @@ class PointOfSale extends Component
         $availableStock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0);
 
         if ($stockQuantity > $availableStock) {
-            $this->addError('quantity', 'Jumlah melebihi stok tersedia ('.number_format($availableStock, 3, ',', '.').' '.$product->unit->abbreviation.').');
+            $this->addError('quantity', 'Jumlah melebihi stok tersedia ('.rtrim(rtrim(number_format($availableStock, 3, ',', '.'), '0'), ',').' '.$product->unit->abbreviation.').');
 
             return;
         }
@@ -244,7 +279,7 @@ class PointOfSale extends Component
 
         $this->reset([
             'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width',
-            'customSpecification', 'orderNotes', 'editingCartKey', 'specificationInputs', 'customSpecificationInputs',
+            'customSpecification', 'orderNotes', 'editingCartKey', 'specificationInputs', 'customSpecificationInputs', 'sizePresetId',
         ]);
         $this->showProductDetails = false;
         $this->quantity = '';
@@ -268,11 +303,11 @@ class PointOfSale extends Component
         $this->priceBasis = $item['pricing_basis'];
         $this->unitPrice = (string) $item['unit_price'];
         $this->specificationInputs = $item['specification_values'] ?? [];
-        $this->customSpecificationInputs = array_fill_keys($item['specification_custom_keys'] ?? [], '');
+        $this->customSpecificationInputs = $item['specification_values'] ?? [];
+        $this->sizePresetId = '';
 
         foreach ($item['specification_custom_keys'] ?? [] as $key) {
             $this->specificationInputs[$key] = '__custom__';
-            $this->customSpecificationInputs[$key] = $item['specification_values'][$key] ?? '';
         }
         $this->orderNotes = $item['notes'] ?? '';
         $this->showProductDetails = true;
@@ -381,7 +416,7 @@ class PointOfSale extends Component
                     );
                     $variant = $this->findMatchingVariant($product, $specificationData['values'], $specificationData['custom_keys']);
 
-                    if ($product->variants->where('is_active', true)->isNotEmpty() && $variant === null) {
+                    if ($product->variants->where('is_active', true)->isNotEmpty() && $variant === null && $specificationData['custom_keys'] === []) {
                         throw ValidationException::withMessages(['cart' => 'Harga variasi '.$product->name.' sudah tidak tersedia. Perbarui spesifikasi atau harga custom produk.']);
                     }
 
@@ -532,7 +567,7 @@ class PointOfSale extends Component
         return view('livewire.sales.point-of-sale', [
             'products' => $products,
             'selectedProduct' => $this->productId
-                ? Product::query()->with(['unit', 'category.specifications', 'inventoryLevels', 'variants'])->find($this->productId)
+                ? Product::query()->with(['brand', 'unit', 'category.specifications', 'inventoryLevels', 'variants'])->find($this->productId)
                 : null,
             'categories' => Category::query()->where('is_active', true)->orderBy('name')->get(),
             'cartForDisplay' => $cartForDisplay,
@@ -574,7 +609,7 @@ class PointOfSale extends Component
 
             $variant = $this->findMatchingVariant($product, $item['specification_values'] ?? [], $item['specification_custom_keys'] ?? []);
             $hasActiveVariants = $product->variants->contains(fn (ProductVariant $activeVariant): bool => $activeVariant->is_active);
-            $item['price_available'] = ! $hasActiveVariants || $variant !== null;
+            $item['price_available'] = ! $hasActiveVariants || $variant !== null || ($item['specification_custom_keys'] ?? []) !== [];
             $item['unit_price'] = $item['price_available'] ? (float) ($variant?->selling_price ?? $product->selling_price) : 0;
             $amount = $product->pricing_method === 'weight'
                 ? (float) ($item['actual_weight'] ?? 0)
@@ -630,7 +665,7 @@ class PointOfSale extends Component
 
     private function prepareProductForm(Product $product): void
     {
-        $this->reset(['actualWeight', 'diameter', 'shape', 'length', 'width', 'customSpecification', 'orderNotes']);
+        $this->reset(['actualWeight', 'diameter', 'shape', 'length', 'width', 'customSpecification', 'orderNotes', 'sizePresetId']);
         $this->specificationInputs = [];
         $this->customSpecificationInputs = [];
         $this->quantity = '';
@@ -642,7 +677,7 @@ class PointOfSale extends Component
     {
         $this->reset([
             'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width',
-            'customSpecification', 'orderNotes',
+            'customSpecification', 'orderNotes', 'sizePresetId',
         ]);
         $this->specificationInputs = [];
         $this->customSpecificationInputs = [];
@@ -666,18 +701,16 @@ class PointOfSale extends Component
         foreach ($specifications as $specification) {
             $selected = $selectedValues[$specification->key] ?? '';
             $isCustom = in_array($specification->key, $forcedCustomKeys, true) || $selected === '__custom__';
-            $value = $isCustom ? trim($customValues[$specification->key] ?? $selectedValues[$specification->key] ?? '') : trim($selected);
+            $value = $selected === '__custom__'
+                ? trim($customValues[$specification->key] ?? '')
+                : trim($selected);
 
             if ($value === '') {
-                if ($specification->is_required) {
+                if ($specification->is_required || in_array($specification->key, $forcedCustomKeys, true)) {
                     throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Pilih atau isi '.$specification->name.'.']);
                 }
 
                 continue;
-            }
-
-            if ($isCustom && ! $specification->allow_custom) {
-                throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Nilai khusus tidak diizinkan untuk '.$specification->name.'.']);
             }
 
             if (! $isCustom && filled($specification->options) && ! in_array($value, $specification->options, true)) {

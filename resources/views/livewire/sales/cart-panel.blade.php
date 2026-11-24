@@ -14,7 +14,7 @@
                     <img class="cart-product-image" src="{{ !empty($item['image_path']) ? asset('storage/'.$item['image_path']) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $item['product_name'] }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'">
                     <div class="cart-item-main">
                         <strong>{{ $item['product_name'] }}</strong>
-                        <small>@if($item['pricing_basis'] === 'weight'){{ number_format($item['actual_weight'], 3, ',', '.') }} kg @else{{ number_format($item['quantity'], 3, ',', '.') }} {{ $item['unit_name'] }}@endif</small>
+                        <small>@if($item['pricing_basis'] === 'weight')@quantity($item['actual_weight']) kg @else@quantity($item['quantity']) {{ $item['unit_name'] }}@endif</small>
                         @if($item['price_available'])<small>@rupiah($item['unit_price']) / {{ $item['pricing_basis'] === 'weight' ? 'kg' : $item['stock_unit'] }}</small>@else<small class="catalog-error">Harga variasi tidak tersedia</small>@endif
                         @if($item['specifications'])<small>{{ collect($item['specifications'])->map(fn ($value, $key) => $key.': '.$value)->implode(' · ') }}</small>@endif
                         @if($item['notes'])<small>{{ $item['notes'] }}</small>@endif

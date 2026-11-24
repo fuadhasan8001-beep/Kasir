@@ -1,6 +1,11 @@
 @extends('layouts.app')
-@section('page-title', 'Kasir')
+@section('page-title', request()->routeIs('orders.custom') ? 'Pesanan' : 'Kasir')
 @section('content')
-    <div class="welcome-row page-intro"><div><h2>Catat transaksi</h2><p>Pilih barang dan masukkan jumlah atau ukuran. Penyimpanan catatan akan memperbarui stok.</p></div></div>
-    <livewire:sales.point-of-sale />
+    @php($showOrders = request()->routeIs('orders.custom'))
+    <div class="welcome-row page-intro"><div><h2>{{ $showOrders ? 'Pesanan' : 'Kasir' }}</h2><p>{{ $showOrders ? 'Pantau proses pesanan dan selesaikan pembayaran saat barang diserahkan.' : 'Pilih barang, masukkan jumlah, lalu selesaikan pembayaran.' }}</p></div></div>
+    @if($showOrders)
+        <livewire:orders.manage-custom-orders />
+    @else
+        <livewire:sales.point-of-sale />
+    @endif
 @endsection

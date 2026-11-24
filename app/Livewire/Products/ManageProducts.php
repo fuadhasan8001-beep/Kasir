@@ -31,8 +31,6 @@ class ManageProducts extends Component
 
     public string $sku = '';
 
-    public string $barcode = '';
-
     public string $name = '';
 
     public string $brandName = '';
@@ -41,9 +39,7 @@ class ManageProducts extends Component
 
     public ?int $unitId = null;
 
-    public string $productType = 'general';
-
-    public string $pricingMethod = 'unit';
+    public string $pricingMethod = 'weight';
 
     public string $description = '';
 
@@ -104,6 +100,7 @@ class ManageProducts extends Component
     public function create(): void
     {
         $this->resetForm();
+        $this->sku = $this->generateSku();
         $this->showForm = true;
     }
 
@@ -113,12 +110,10 @@ class ManageProducts extends Component
 
         $this->editingProductId = $product->id;
         $this->sku = $product->sku;
-        $this->barcode = $product->barcode ?? '';
         $this->name = $product->name;
         $this->brandName = $product->brand?->name ?? '';
         $this->categoryId = $product->category_id;
-        $this->unitId = $product->unit_id;
-        $this->productType = $product->product_type;
+        $this->unitId = Unit::query()->where('abbreviation', 'kg')->value('id');
         $this->pricingMethod = $product->pricing_method;
         $this->description = $product->description ?? '';
         $this->photo = null;
@@ -126,8 +121,8 @@ class ManageProducts extends Component
         $this->removeCurrentImage = false;
         $this->purchasePrice = $product->purchase_price;
         $this->sellingPrice = $product->selling_price;
-        $this->minimumStock = $product->minimum_stock;
-        $this->stockQuantity = (string) ($product->inventoryLevels()->where('inventory_type', 'finished')->value('quantity') ?? 0);
+        $this->minimumStock = $this->formatQuantityForInput($product->minimum_stock);
+        $this->stockQuantity = $this->formatQuantityForInput($product->inventoryLevels()->where('inventory_type', 'finished')->value('quantity') ?? 0);
         $this->stockQuantityChanged = false;
         $this->isActive = $product->is_active;
         $this->specificationValues = $product->specificationValues->pluck('value', 'product_specification_id')->all();
@@ -175,14 +170,10 @@ class ManageProducts extends Component
     {
 
         $rules = [
-            'sku' => ['required', 'string', 'max:80', Rule::unique('products', 'sku')->ignore($this->editingProductId)],
-            'barcode' => ['nullable', 'string', 'max:100', Rule::unique('products', 'barcode')->ignore($this->editingProductId)],
             'name' => ['required', 'string', 'max:180'],
             'brandName' => ['nullable', 'string', 'max:120'],
             'categoryId' => ['required', 'integer', 'exists:categories,id'],
-            'unitId' => ['required', 'integer', 'exists:units,id'],
-            'productType' => ['required', Rule::in(['general', 'construction_material', 'assembled'])],
-            'pricingMethod' => ['required', Rule::in(['unit', 'weight', 'bar'])],
+            'pricingMethod' => ['required', Rule::in(['weight'])],
             'description' => ['nullable', 'string', 'max:2000'],
             'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'purchasePrice' => ['required', 'numeric', 'min:0', 'max:9999999999999.99'],
@@ -228,11 +219,8 @@ class ManageProducts extends Component
         }
 
         $validated = $this->validate($rules, [
-            'sku.required' => 'Kode barang wajib diisi.',
-            'sku.unique' => 'Kode barang sudah digunakan.',
             'name.required' => 'Nama barang wajib diisi.',
             'categoryId.required' => 'Pilih kategori barang.',
-            'unitId.required' => 'Pilih satuan dasar.',
             'purchasePrice.numeric' => 'Harga beli harus berupa angka.',
             'sellingPrice.numeric' => 'Harga jual harus berupa angka.',
             'minimumStock.numeric' => 'Stok minimum harus berupa angka.',
@@ -284,14 +272,11 @@ class ManageProducts extends Component
                 : null;
 
             $attributes = [
-                'sku' => trim($validated['sku']),
-                'barcode' => filled($validated['barcode']) ? trim($validated['barcode']) : null,
                 'name' => trim($validated['name']),
                 'category_id' => $validated['categoryId'],
                 'brand_id' => $brand?->id,
-                'unit_id' => $validated['unitId'],
-                'product_type' => $validated['productType'],
-                'pricing_method' => $validated['pricingMethod'],
+                'unit_id' => Unit::query()->where('abbreviation', 'kg')->value('id'),
+                'pricing_method' => 'weight',
                 'description' => $validated['description'] ?: null,
                 'purchase_price' => $validated['purchasePrice'],
                 'selling_price' => $validated['sellingPrice'],
@@ -302,6 +287,10 @@ class ManageProducts extends Component
             $product = $this->editingProductId
                 ? Product::query()->lockForUpdate()->findOrFail($this->editingProductId)
                 : new Product;
+
+            if ($this->editingProductId === null) {
+                $product->sku = $this->generateSku();
+            }
 
             $product->fill($attributes)->save();
 
@@ -329,7 +318,7 @@ class ManageProducts extends Component
                     StockMovement::create([
                         'product_id' => $product->id,
                         'user_id' => auth()->id(),
-                        'movement_type' => 'adjustment',
+                        'movement_type' => $this->editingProductId === null ? 'in' : 'adjustment',
                         'quantity' => $stockDelta,
                         'balance_after' => $newBalance,
                         'inventory_type' => 'finished',
@@ -415,15 +404,14 @@ class ManageProducts extends Component
     private function resetForm(): void
     {
         $this->reset(
-            'sku', 'barcode', 'name', 'brandName', 'categoryId', 'unitId', 'description',
+            'sku', 'name', 'brandName', 'categoryId', 'unitId', 'description',
             'purchasePrice', 'sellingPrice', 'minimumStock', 'specificationValues', 'variants', 'editingProductId',
             'stockQuantity', 'stockQuantityChanged',
         );
         $this->photo = null;
         $this->currentImagePath = '';
         $this->removeCurrentImage = false;
-        $this->productType = 'general';
-        $this->pricingMethod = 'unit';
+        $this->pricingMethod = 'weight';
         $this->purchasePrice = '0';
         $this->sellingPrice = '0';
         $this->minimumStock = '0';
@@ -434,6 +422,24 @@ class ManageProducts extends Component
         $this->resetValidation();
     }
 
+    private function formatQuantityForInput(string|int|float $quantity): string
+    {
+        return str_contains((string) $quantity, '.')
+            ? rtrim(rtrim((string) $quantity, '0'), '.')
+            : (string) $quantity;
+    }
+
+    private function generateSku(): string
+    {
+        $lastSequence = Product::withTrashed()
+            ->where('sku', 'like', 'BRG-%')
+            ->pluck('sku')
+            ->map(fn (string $sku): int => preg_match('/^BRG-(\d+)$/', $sku, $matches) === 1 ? (int) $matches[1] : 0)
+            ->max() ?? 0;
+
+        return 'BRG-'.str_pad((string) ($lastSequence + 1), 4, '0', STR_PAD_LEFT);
+    }
+
     public function render(): View
     {
         return view('livewire.products.manage-products', [
@@ -441,8 +447,7 @@ class ManageProducts extends Component
                 ->with(['category', 'brand', 'unit', 'inventoryLevels', 'specificationValues.specification'])
                 ->when($this->search, fn ($query) => $query->where(fn ($query) => $query
                     ->where('name', 'like', '%'.$this->search.'%')
-                    ->orWhere('sku', 'like', '%'.$this->search.'%')
-                    ->orWhere('barcode', 'like', '%'.$this->search.'%')))
+                    ->orWhere('sku', 'like', '%'.$this->search.'%')))
                 ->when($this->categoryFilter, fn ($query) => $query->where('category_id', $this->categoryFilter))
                 ->orderBy('name')
                 ->paginate(12),

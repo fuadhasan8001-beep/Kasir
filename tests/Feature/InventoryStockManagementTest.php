@@ -42,8 +42,8 @@ class InventoryStockManagementTest extends TestCase
             ->call('saveMovement')
             ->assertHasNoErrors()
             ->assertSee('Stok sebelum')
-            ->assertSee('140,000')
-            ->assertSee('135,000');
+            ->assertSee('140')
+            ->assertSee('135');
 
         $this->assertDatabaseHas('inventory_levels', ['product_id' => $product->id, 'quantity' => 135]);
         $this->assertDatabaseHas('stock_movements', ['product_id' => $product->id, 'movement_type' => 'in', 'quantity' => 50, 'balance_after' => 150, 'user_id' => $user->id]);

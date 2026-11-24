@@ -9,6 +9,7 @@ use App\Models\SaleItem;
 use App\Models\StockMovement;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\View\View;
+use Livewire\Attributes\On;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -29,14 +30,17 @@ class Summary extends Component
     public function updatedDateFrom(): void
     {
         $this->validateOnly('dateFrom', ['dateFrom' => ['required', 'date', 'before_or_equal:dateTo']]);
-        $this->resetPage();
+        $this->resetPage('salesPage');
     }
 
     public function updatedDateTo(): void
     {
         $this->validateOnly('dateTo', ['dateTo' => ['required', 'date', 'after_or_equal:dateFrom', 'before_or_equal:today']]);
-        $this->resetPage();
+        $this->resetPage('salesPage');
     }
+
+    #[On('expenses-updated')]
+    public function refreshExpenseSummary(): void {}
 
     public function boot(): void
     {
@@ -55,12 +59,11 @@ class Summary extends Component
             ->whereDate('expense_date', '<=', $this->dateTo);
 
         return view('livewire.reports.summary', [
-            'sales' => (clone $sales)->with(['user', 'items'])->latest()->paginate(15),
+            'sales' => (clone $sales)->with(['user', 'items'])->latest()->paginate(15, ['*'], 'salesPage'),
             'transactionCount' => (clone $sales)->count(),
             'revenue' => (float) (clone $sales)->sum('total'),
             'grossProfit' => (float) (clone $saleItems)->selectRaw('COALESCE(SUM(line_total - (quantity * unit_cost)), 0) AS aggregate')->value('aggregate'),
             'expensesTotal' => (float) (clone $expenses)->sum('amount'),
-            'expenses' => (clone $expenses)->with('user')->latest('expense_date')->limit(15)->get(),
             'inventory' => InventoryLevel::query()->with('product.category', 'product.unit')
                 ->where('inventory_type', 'finished')
                 ->whereHas('product', fn (Builder $query) => $query->where('is_active', true))

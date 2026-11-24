@@ -22,7 +22,7 @@
                         <span class="login-headline-line">Semua pekerjaan</span>
                         <span class="login-headline-line"><span class="login-headline-light">toko,</span> <em>lebih tertata.</em></span>
                     </h2>
-                    <p>Kelola penjualan, persediaan, dan pesanan custom dengan alur kerja yang lebih rapi dalam satu ruang kerja.</p>
+                    <p>Kelola transaksi, pesanan, dan persediaan dalam satu ruang kerja yang praktis.</p>
                 </div>
 
                 <div class="login-material-card" aria-label="Material besi dan baja: besi lonjoran, begel, cakar ayam, slop, kawat, dan wermes">
@@ -102,6 +102,10 @@
                 <h1>Masuk ke akun Anda</h1>
                 <p class="login-description">Gunakan akun terdaftar untuk membuka ruang kerja toko.</p>
 
+                @if (session('status'))
+                    <p class="login-status" role="status">{{ session('status') }}</p>
+                @endif
+
                 <form method="POST" action="{{ route('login') }}" id="login-form" class="login-form">
                     @csrf
                     <div class="login-field">
@@ -127,11 +131,11 @@
                     </div>
 
                     <button type="submit" class="login-submit" id="submit"><span>Masuk ke ruang kerja</span><span aria-hidden="true">↗</span></button>
-                </form>
 
-                @if (Route::has('password.request'))
-                    <a class="login-forgot-password" href="{{ route('password.request') }}">Lupa kata sandi?</a>
-                @endif
+                    @if (Route::has('password.request'))
+                        <a class="login-forgot-password" href="{{ route('password.request') }}">Lupa kata sandi?</a>
+                    @endif
+                </form>
 
                 <p class="login-security"><span aria-hidden="true">◈</span> Akses khusus untuk pengguna terdaftar.</p>
             </div>
