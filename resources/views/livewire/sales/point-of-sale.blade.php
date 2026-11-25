@@ -27,24 +27,27 @@
         @include('livewire.sales.cart-panel')
     @else
         <div class="pos-catalog-toolbar">
-            <div><h2>Katalog produk</h2><p>Pilih produk untuk memulai transaksi.</p></div>
+            <div class="pos-catalog-heading"><span class="pos-eyebrow">Penjualan langsung</span><h2>Katalog produk</h2><p>Pilih barang untuk memulai transaksi. Harga dan stok tampil di setiap produk.</p></div>
             <a class="button-primary cart-page-link" href="{{ route('kasir.cart') }}" aria-label="Buka keranjang, {{ count($cart) }} jenis produk">
                 <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 8H6"/><circle cx="10" cy="20" r="1"/><circle cx="18" cy="20" r="1"/></svg><span>Keranjang</span><b>{{ count($cart) }}</b>
             </a>
         </div>
-        <section class="catalog-panel pos-products-panel">
+        <section class="catalog-panel pos-products-panel pos-catalog-panel">
             <div class="catalog-panel-heading">
-                <div><h2>Katalog Produk</h2><p>Pilih produk untuk menambahkannya ke transaksi.</p></div>
-                <span class="pos-item-count">{{ $products->count() }} produk</span>
+                <div><h2>Semua produk</h2><p>Ketuk kartu untuk memilih jumlah dan spesifikasi.</p></div>
+                <span class="pos-item-count">{{ $products->count() }} tersedia</span>
             </div>
 
-            <label class="search-label"><span>Cari produk</span><input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="Nama, SKU, atau barcode"></label>
+            <label class="search-label pos-search-label"><span>Cari produk</span><span class="pos-search-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg><input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="Nama, SKU, atau barcode"></span></label>
 
-            <div class="category-chips" aria-label="Filter kategori">
-                <button type="button" class="category-chip {{ $categoryFilter === '' ? 'active' : '' }}" wire:click="$set('categoryFilter', '')">Semua</button>
-                @foreach($categories as $category)
-                    <button type="button" wire:key="category-chip-{{ $category->id }}" class="category-chip {{ (string) $categoryFilter === (string) $category->id ? 'active' : '' }}" wire:click="$set('categoryFilter', '{{ $category->id }}')">{{ $category->name }}</button>
-                @endforeach
+            <div class="pos-category-section">
+                <span class="pos-filter-caption">Kategori</span>
+                <div class="category-chips" aria-label="Filter kategori">
+                    <button type="button" class="category-chip {{ $categoryFilter === '' ? 'active' : '' }}" wire:click="$set('categoryFilter', '')">Semua</button>
+                    @foreach($categories as $category)
+                        <button type="button" wire:key="category-chip-{{ $category->id }}" class="category-chip {{ (string) $categoryFilter === (string) $category->id ? 'active' : '' }}" wire:click="$set('categoryFilter', '{{ $category->id }}')">{{ $category->name }}</button>
+                    @endforeach
+                </div>
             </div>
 
             @error('product-selection')<p class="catalog-error pos-selection-error">{{ $message }}</p>@enderror

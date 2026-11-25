@@ -1,4 +1,4 @@
-<div class="catalog-panel transaction-history">
+<div class="catalog-panel transaction-history records-panel">
     <div class="history-summary"><article><span>Transaksi</span><strong>{{ number_format($transactionCount, 0, ",", ".") }}</strong></article><article><span>Total nilai</span><strong>@rupiah($totalValue)</strong></article></div>
     <div class="filter-row">
         <label class="history-search">Cari invoice<input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="INV-…"></label>

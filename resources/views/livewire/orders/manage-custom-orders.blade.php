@@ -1,7 +1,7 @@
 <div class="custom-orders-page">
     @if (session('status'))<div class="notice-card"><strong>{{ session('status') }}</strong></div>@endif
     <div class="orders-layout">
-        <section class="catalog-panel order-form-panel">
+        <section id="buat-pesanan" class="catalog-panel order-form-panel">
             <div class="catalog-panel-heading"><div><h2>Buat pesanan</h2><p>Catat barang dan jadwal pengambilan pelanggan.</p></div></div>
             <form class="catalog-form" wire:submit="createOrder">
                 <div class="pos-input-grid"><label>Nama pelanggan<input wire:model="customerName" maxlength="160">@error('customerName')<small>{{ $message }}</small>@enderror</label><label>Nomor telepon (opsional)<input type="tel" wire:model="customerPhone" maxlength="40" placeholder="Boleh dikosongkan"></label></div>

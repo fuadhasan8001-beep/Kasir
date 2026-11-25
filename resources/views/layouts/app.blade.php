@@ -11,7 +11,6 @@
 <body class="app-shell">
     <div x-data="{
     mobileMenuOpen: false,
-    accountSheetOpen: false,
     bodyScrollState: null,
     touchStartY: 0,
     scrollGuard: null,
@@ -131,8 +130,7 @@
     },
 }" x-on:resize.window="
     if (mobileMenuOpen) mobileMenuOpen = false;
-    if (accountSheetOpen) accountSheetOpen = false;
-" x-on:keydown.escape.window="mobileMenuOpen = false; accountSheetOpen = false" x-init="$watch('mobileMenuOpen', (isOpen) => updateScrollGuards(isOpen))">
+" x-on:keydown.escape.window="mobileMenuOpen = false" x-init="$watch('mobileMenuOpen', (isOpen) => updateScrollGuards(isOpen))">
         <!-- Mobile topbar: compact brand and navigation controls -->
         <header class="topbar topbar-mobile">
             <button class="mobile-menu-toggle" type="button" aria-label="Buka menu navigasi" x-on:click="mobileMenuOpen = true">
@@ -196,7 +194,7 @@
                         <span class="user-chip-detail"><strong>{{ auth()->user()->name }}</strong><small>Administrator</small></span>
                     </a>
                 </div>
-                <form class="sidebar-logout-form" method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin ingin keluar?')">
+                <form class="sidebar-logout-form" method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin mau keluar?')">
                     @csrf
                     <button type="submit">Logout</button>
                 </form>
@@ -239,37 +237,11 @@
                 <div class="nav-icon">⏱</div>
                 <span>Riwayat</span>
             </a>
-            <a class="bottom-nav-item bottom-nav-account" href="#" @click.prevent="accountSheetOpen = true">
+            <a class="bottom-nav-item bottom-nav-account {{ request()->routeIs('profile.*') ? 'active' : '' }}" href="{{ route('profile.edit') }}">
                 <div class="avatar avatar-sm">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</div>
                 <span>Akun</span>
             </a>
         </nav>
-
-        <!-- Mobile account bottom sheet -->
-        <div class="modal-sheet" x-show="accountSheetOpen" @keydown.prevent.escape="accountSheetOpen = false" tabindex="-1" role="dialog" aria-modal="true" aria-label="Profil dan keluar">
-            <div class="modal-sheet-overlay" @click="accountSheetOpen = false"></div>
-            <div class="modal-sheet-panel">
-                <div class="sheet-heading">
-                    <div class="sheet-user-row">
-                        <span class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span>
-                        <div>
-                            <strong>{{ auth()->user()->name }}</strong>
-                            <small>Administrator</small>
-                        </div>
-                    </div>
-                    <a class="close-sheet" href="#" @click.prevent="accountSheetOpen = false">✕</a>
-                </div>
-                <div class="sheet-body">
-                    <p class="muted">Pengaturan akun administrator.</p>
-                    <a class="link-secondary" href="{{ route('profile.edit') }}">→ Akun Saya</a>
-                    <a class="link-secondary" href="{{ route('profile.edit') }}#password">→ Ubah Password</a>
-                    <form method="POST" action="{{ route('logout') }}" class="logout-row">
-                        @csrf
-                        <button type="submit" onclick="return confirm('Yakin ingin keluar?')">Logout</button>
-                    </form>
-                </div>
-            </div>
-        </div>
 
         @livewireScripts
     </div>

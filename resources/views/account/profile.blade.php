@@ -27,6 +27,10 @@
                     <div><dt class="text-xs text-neutral-500">Email</dt><dd class="mt-1 font-medium text-neutral-800 profile-account-value">{{ $user->email }}</dd></div>
                     <div><dt class="text-xs text-neutral-500">Bergabung</dt><dd class="mt-1 font-medium text-neutral-800">{{ $user->created_at->timezone('Asia/Jakarta')->translatedFormat('d F Y') }}</dd></div>
                 </dl>
+                <form class="mt-5 border-t border-neutral-100 pt-4" method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin mau keluar?')">
+                    @csrf
+                    <button class="button-danger" type="submit">Keluar akun</button>
+                </form>
             </div>
 
             <div class="profile-info-section">
