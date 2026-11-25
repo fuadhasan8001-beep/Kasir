@@ -192,7 +192,7 @@ class ManageProducts extends Component
 
         foreach ($specifications as $specification) {
             $rules['specificationValues.'.$specification->id] = [
-                $specification->is_required ? 'required' : 'nullable',
+                $specification->is_required && ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true) ? 'required' : 'nullable',
                 match ($specification->data_type) {
                     'number' => 'numeric',
                     'integer' => 'integer',
@@ -375,8 +375,18 @@ class ManageProducts extends Component
 
     public function delete(Product $product): void
     {
-        $product->delete();
-        session()->flash('status', 'Barang diarsipkan dan tidak lagi muncul di katalog aktif.');
+        $imagePath = $product->image_path;
+
+        DB::transaction(function () use ($product): void {
+            StockMovement::query()->where('product_id', $product->id)->delete();
+            $product->forceDelete();
+        });
+
+        if ($imagePath !== null) {
+            Storage::disk('public')->delete($imagePath);
+        }
+
+        session()->flash('status', 'Barang berhasil dihapus.');
     }
 
     public function viewDetails(Product $product): void

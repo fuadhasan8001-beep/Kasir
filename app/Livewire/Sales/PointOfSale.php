@@ -706,7 +706,7 @@ class PointOfSale extends Component
                 : trim($selected);
 
             if ($value === '') {
-                if ($specification->is_required || in_array($specification->key, $forcedCustomKeys, true)) {
+                if (($specification->is_required && ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true)) || in_array($specification->key, $forcedCustomKeys, true)) {
                     throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Pilih atau isi '.$specification->name.'.']);
                 }
 

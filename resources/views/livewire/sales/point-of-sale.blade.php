@@ -77,12 +77,13 @@
             $specificationsComplete = true;
             $selectedSpecificationValues = [];
             foreach ($selectedProduct->category->specifications as $specification) {
+                $isOptionalDimension = in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true);
                 $selection = $specificationInputs[$specification->key] ?? '';
                 $isCustomSelection = $selection === '__custom__';
                 $specificationValue = $isCustomSelection
                     ? trim($customSpecificationInputs[$specification->key] ?? '')
                     : trim($selection);
-                if ($specification->is_required && $specificationValue === '') {
+                if ($specification->is_required && ! $isOptionalDimension && $specificationValue === '') {
                     $specificationsComplete = false;
                 }
                 if ($specificationValue !== '') {
@@ -122,15 +123,15 @@
                 <form class="catalog-form pos-item-form" wire:submit="addItem">
                     @if($selectedProduct->category->specifications->isNotEmpty())
                         <section class="pos-size-picker" aria-labelledby="pos-size-picker-title">
-                            <div class="pos-size-picker-heading"><strong id="pos-size-picker-title">Pilihan {{ strtolower($selectedProduct->category->name) }}</strong><small>Diatur di menu Kategori</small></div>
+                            <div class="pos-size-picker-heading"><strong id="pos-size-picker-title">Pilih ukuran atau spesifikasi barang</strong><small>Daftar dari kategori {{ $selectedProduct->category->name }}</small></div>
                             <div class="pos-input-grid">
                                 @foreach($selectedProduct->category->specifications as $specification)
                                     @php($specificationSelection = $specificationInputs[$specification->key] ?? '')
-                                    <div class="pos-spec-option-group" wire:key="pos-spec-{{ $specification->id }}"><span class="pos-spec-option-label">{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif @if($specification->is_required)<span aria-hidden="true">*</span>@endif</span>
+                                    <div class="pos-spec-option-group" wire:key="pos-spec-{{ $specification->id }}"><span class="pos-spec-option-label">{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif @if($specification->is_required && ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true))<span aria-hidden="true">*</span>@endif</span>
                                         @if(filled($specification->options))
                                             <div class="pos-spec-options" role="group" aria-label="{{ $specification->name }}">
-                                                @foreach($specification->options as $option)
-                                                    <button type="button" class="pos-spec-option {{ $specificationSelection === (string) $option ? 'active' : '' }}" wire:click="$set('specificationInputs.{{ $specification->key }}', @js((string) $option))">{{ $option }}</button>
+                                                @foreach($specification->options as $optionIndex => $option)
+                                                    <button type="button" wire:key="pos-spec-option-{{ $specification->id }}-{{ $optionIndex }}" class="pos-spec-option {{ $specificationSelection === (string) $option ? 'active' : '' }}" wire:click="$set('specificationInputs.{{ $specification->key }}', @js((string) $option))">{{ $option }}</button>
                                                 @endforeach
                                                 @if($specification->allow_custom)<button type="button" class="pos-spec-option {{ $specificationSelection === '__custom__' ? 'active' : '' }}" wire:click="$set('specificationInputs.{{ $specification->key }}', '__custom__')">Custom</button>@endif
                                             </div>

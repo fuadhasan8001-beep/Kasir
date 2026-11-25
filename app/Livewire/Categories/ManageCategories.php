@@ -39,6 +39,14 @@ class ManageCategories extends Component
 
     public string $specificationOptions = '';
 
+    /** @var array{shape: string, length: string, width: string, diameter: string} */
+    public array $dimensionOptions = [
+        'shape' => '',
+        'length' => '',
+        'width' => '',
+        'diameter' => '',
+    ];
+
     public bool $specificationAllowCustom = false;
 
     public bool $specificationRequired = false;
@@ -115,6 +123,103 @@ class ManageCategories extends Component
     {
         $this->specificationCategoryId = $category->id;
         $this->resetSpecificationForm();
+
+        $specifications = $category->specifications()->whereIn('key', ['bentuk', 'panjang', 'lebar', 'diameter_besi'])->get()->keyBy('key');
+
+        $this->dimensionOptions = [
+            'shape' => implode("\n", $specifications->get('bentuk')?->options ?? []),
+            'length' => implode("\n", $specifications->get('panjang')?->options ?? []),
+            'width' => implode("\n", $specifications->get('lebar')?->options ?? []),
+            'diameter' => implode("\n", $specifications->get('diameter_besi')?->options ?? []),
+        ];
+    }
+
+    public function saveDimensionOptions(): void
+    {
+        $validated = $this->validate([
+            'specificationCategoryId' => ['required', 'integer', 'exists:categories,id'],
+            'dimensionOptions' => ['required', 'array'],
+            'dimensionOptions.shape' => ['nullable', 'string', 'max:5000'],
+            'dimensionOptions.length' => ['nullable', 'string', 'max:5000'],
+            'dimensionOptions.width' => ['nullable', 'string', 'max:5000'],
+            'dimensionOptions.diameter' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $definitions = [
+            'shape' => ['name' => 'Bentuk', 'key' => 'bentuk'],
+            'length' => ['name' => 'Panjang', 'key' => 'panjang'],
+            'width' => ['name' => 'Lebar', 'key' => 'lebar'],
+            'diameter' => ['name' => 'Diameter besi', 'key' => 'diameter_besi'],
+        ];
+        $normalizedOptions = [];
+
+        foreach ($definitions as $field => $definition) {
+            $options = collect(preg_split('/\r\n|\r|\n/', $validated['dimensionOptions'][$field] ?? '') ?: [])
+                ->map(fn (string $option): string => trim($option))
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($options->count() > 100 || $options->contains(fn (string $option): bool => mb_strlen($option) > 120)) {
+                throw ValidationException::withMessages([
+                    'dimensionOptions.'.$field => 'Gunakan maksimal 100 pilihan dan batasi setiap pilihan hingga 120 karakter.',
+                ]);
+            }
+
+            $normalizedOptions[$field] = [$definition, $options];
+        }
+
+        DB::transaction(function () use ($validated, $normalizedOptions): void {
+            foreach ($normalizedOptions as $field => [$definition, $options]) {
+                $specification = ProductSpecification::query()
+                    ->where('category_id', $validated['specificationCategoryId'])
+                    ->where('key', $definition['key'])
+                    ->first();
+
+                if ($options->isEmpty()) {
+                    if ($specification === null) {
+                        continue;
+                    }
+
+                    $hasVariantReference = ProductVariant::query()
+                        ->whereHas('product', fn ($query) => $query->where('category_id', $validated['specificationCategoryId']))
+                        ->get()
+                        ->contains(fn (ProductVariant $variant): bool => array_key_exists($definition['key'], $variant->specifications ?? []));
+
+                    if ($specification->values()->exists() || $hasVariantReference) {
+                        throw ValidationException::withMessages([
+                            'dimensionOptions.'.$field => 'Pilihan ini masih dipakai produk atau variasi. Ubah daftar pilihannya, jangan kosongkan.',
+                        ]);
+                    }
+
+                    $specification->delete();
+
+                    continue;
+                }
+
+                ProductSpecification::query()->updateOrCreate(
+                    [
+                        'category_id' => $validated['specificationCategoryId'],
+                        'key' => $definition['key'],
+                    ],
+                    [
+                        'name' => $definition['name'],
+                        'data_type' => 'text',
+                        'measurement_unit' => null,
+                        'options' => $options->all(),
+                        'allow_custom' => false,
+                        'is_required' => false,
+                        'sort_order' => array_search($definition['key'], ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true),
+                    ],
+                );
+            }
+        });
+
+        foreach ($definitions as $field => $definition) {
+            $this->dimensionOptions[$field] = implode("\n", $normalizedOptions[$field][1]->all()) ?: $this->dimensionOptions[$field];
+        }
+
+        session()->flash('status', 'Daftar bentuk dan ukuran berhasil disimpan untuk menu Kasir.');
     }
 
     public function editSpecification(ProductSpecification $specification): void

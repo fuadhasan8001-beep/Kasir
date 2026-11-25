@@ -20,7 +20,7 @@
                     @php($stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0))
                     <td>@quantity($stock) {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td>
                     <td><span class="catalog-status {{ ! $product->is_active || $stock <= 0 || $stock <= (float) $product->minimum_stock ? 'catalog-status-off' : 'catalog-status-on' }}">{{ ! $product->is_active ? 'Nonaktif' : ($stock <= 0 ? 'Habis' : ($stock <= (float) $product->minimum_stock ? 'Stok menipis' : 'Tersedia')) }}</span></td>
-                    <td><div class="flex justify-end gap-2"><button class="button-secondary button-small" wire:click="viewDetails({{ $product->id }})" type="button">Detail</button><button class="button-secondary button-small" wire:click="edit({{ $product->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="delete({{ $product->id }})" wire:confirm="Arsipkan barang {{ $product->name }}?" type="button">Arsipkan</button></div></td>
+                    <td><div class="flex justify-end gap-2"><button class="button-secondary button-small" wire:click="viewDetails({{ $product->id }})" type="button">Detail</button><button class="button-secondary button-small" wire:click="edit({{ $product->id }})" type="button">Ubah</button><button class="button-danger button-small" wire:click="delete({{ $product->id }})" wire:confirm="Hapus barang {{ $product->name }} secara permanen?" type="button">Hapus</button></div></td>
                 </tr>
             @empty
                 <tr><td colspan="7" class="py-10 text-center text-neutral-500">Tidak ada barang yang cocok dengan pencarian.</td></tr>

@@ -49,17 +49,32 @@
                             <div class="py-7 text-center text-sm text-neutral-500">Belum ada atribut khusus.</div>
                         @endforelse
                     </div>
-                    <form wire:submit="saveSpecification" class="catalog-form rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                        <h3 class="mb-3 text-sm font-semibold">{{ $editingSpecificationId ? 'Ubah atribut' : 'Tambah atribut' }}</h3>
-                        <label>Nama atribut<input wire:model="specificationName" type="text" placeholder="Contoh: Diameter besi">@error('specificationName')<small>{{ $message }}</small>@enderror</label>
-                        <label>Kode atribut<input wire:model="specificationKey" type="text" placeholder="diameter_besi">@error('specificationKey')<small>{{ $message }}</small>@enderror</label>
-                        <div class="grid grid-cols-2 gap-3"><label>Jenis data<select wire:model="specificationType"><option value="text">Teks</option><option value="number">Angka desimal</option><option value="integer">Bilangan bulat</option><option value="boolean">Ya / tidak</option></select>@error('specificationType')<small>{{ $message }}</small>@enderror</label><label>Satuan ukur<input wire:model="measurementUnit" type="text" placeholder="mm, cm, kg">@error('measurementUnit')<small>{{ $message }}</small>@enderror</label></div>
-                        <label>Pilihan ukuran standar<textarea wire:model="specificationOptions" rows="5" placeholder="Satu pilihan per baris, misalnya:&#10;Ø8 mm&#10;Ø10 mm&#10;Ø12 mm">{{ $specificationOptions }}</textarea><small>Opsional. Daftar ini langsung dipakai di modal Kasir.</small>@error('specificationOptions')<small>{{ $message }}</small>@enderror</label>
-                        <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationRequired" type="checkbox">Wajib diisi saat membuat produk</label>
-                        <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationAllowCustom" type="checkbox">Izinkan nilai custom yang diketik manual di Kasir</label>
-                        @error('specificationCategoryId')<small class="catalog-error">{{ $message }}</small>@enderror
-                        <div class="flex gap-2"><button class="button-primary" type="submit">Simpan atribut</button>@if($editingSpecificationId)<button class="button-secondary" wire:click="cancelSpecificationEdit" type="button">Batal</button>@endif</div>
-                    </form>
+                    <div class="space-y-4">
+                        <form wire:submit="saveDimensionOptions" class="catalog-form rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                            <h3 class="mb-1 text-sm font-semibold">Bentuk dan ukuran barang</h3>
+                            <p class="mb-3 text-xs text-neutral-500">Isi pilihan satu per baris. Semua kolom boleh dikosongkan dan pilihan di Kasir juga tidak wajib dipilih.</p>
+                            <label>Bentuk<textarea wire:model="dimensionOptions.shape" rows="4" placeholder="Contoh: Bulat&#10;Kotak">{{ $dimensionOptions['shape'] }}</textarea>@error('dimensionOptions.shape')<small>{{ $message }}</small>@enderror</label>
+                            <label>Panjang<textarea wire:model="dimensionOptions.length" rows="4" placeholder="Contoh: 6 m&#10;12 m">{{ $dimensionOptions['length'] }}</textarea>@error('dimensionOptions.length')<small>{{ $message }}</small>@enderror</label>
+                            <label>Lebar<textarea wire:model="dimensionOptions.width" rows="4" placeholder="Contoh: 2 cm&#10;4 cm">{{ $dimensionOptions['width'] }}</textarea>@error('dimensionOptions.width')<small>{{ $message }}</small>@enderror</label>
+                            <label>Diameter besi<textarea wire:model="dimensionOptions.diameter" rows="4" placeholder="Contoh: Ø8 mm&#10;Ø10 mm&#10;Ø12 mm">{{ $dimensionOptions['diameter'] }}</textarea>@error('dimensionOptions.diameter')<small>{{ $message }}</small>@enderror</label>
+                            @error('specificationCategoryId')<small class="catalog-error">{{ $message }}</small>@enderror
+                            <button class="button-primary" type="submit">Simpan bentuk dan ukuran</button>
+                        </form>
+
+                        <details class="rounded-lg border border-neutral-200 p-4" @if($editingSpecificationId) open @endif>
+                            <summary class="cursor-pointer text-sm font-semibold">Atribut lainnya</summary>
+                            <form wire:submit="saveSpecification" class="catalog-form mt-4">
+                                <h3 class="mb-3 text-sm font-semibold">{{ $editingSpecificationId ? 'Ubah atribut' : 'Tambah atribut' }}</h3>
+                                <label>Nama atribut<input wire:model="specificationName" type="text" placeholder="Contoh: Ketebalan">@error('specificationName')<small>{{ $message }}</small>@enderror</label>
+                                <label>Kode atribut<input wire:model="specificationKey" type="text" placeholder="ketebalan">@error('specificationKey')<small>{{ $message }}</small>@enderror</label>
+                                <div class="grid grid-cols-2 gap-3"><label>Jenis data<select wire:model="specificationType"><option value="text">Teks</option><option value="number">Angka desimal</option><option value="integer">Bilangan bulat</option><option value="boolean">Ya / tidak</option></select>@error('specificationType')<small>{{ $message }}</small>@enderror</label><label>Satuan ukur<input wire:model="measurementUnit" type="text" placeholder="mm, cm, kg">@error('measurementUnit')<small>{{ $message }}</small>@enderror</label></div>
+                                <label>Pilihan standar<textarea wire:model="specificationOptions" rows="3" placeholder="Satu pilihan per baris">{{ $specificationOptions }}</textarea>@error('specificationOptions')<small>{{ $message }}</small>@enderror</label>
+                                <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationRequired" type="checkbox">Wajib diisi saat membuat produk</label>
+                                <label class="!flex !flex-row !items-center gap-2"><input class="!w-4" wire:model="specificationAllowCustom" type="checkbox">Izinkan nilai custom yang diketik manual di Kasir</label>
+                                <div class="flex gap-2"><button class="button-primary" type="submit">Simpan atribut</button>@if($editingSpecificationId)<button class="button-secondary" wire:click="cancelSpecificationEdit" type="button">Batal</button>@endif</div>
+                            </form>
+                        </details>
+                    </div>
                 </div>
             </section>
         </div>
