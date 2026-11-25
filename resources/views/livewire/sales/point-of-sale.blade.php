@@ -63,7 +63,7 @@
                             @if($stock <= 0)<span class="pos-stock-badge stock-empty">Stok habis</span>@endif
                         </span>
                         <span class="pos-product-card-body">
-                            <span class="pos-product-copy"><strong>{{ $product->name }}</strong><small>{{ $product->pricing_method === 'weight' ? 'per kg' : ($product->pricing_method === 'bar' ? 'per batang' : 'per '.$product->unit->abbreviation) }}</small><b>@rupiah($product->selling_price)</b></span>
+                            <span class="pos-product-copy"><strong>{{ $product->name }}</strong><small>{{ $product->pricing_method === 'weight' ? 'per kg' : ($product->pricing_method === 'bar' ? 'per batang' : 'per '.$product->unit->abbreviation) }}</small><b>{{ $product->category->dimension_sets ? 'Harga sesuai ukuran' : 'Pilih ukuran' }}</b></span>
                             <span class="pos-product-action" aria-hidden="true">+</span>
                         </span>
                     </button>
@@ -95,6 +95,8 @@
             }
             $selectedSpecificationValues = collect($selectedSpecificationValues)->sortKeys()->all();
             $hasCustomSpecification = collect($selectedProduct->category->specifications)->contains(fn ($specification) => ($specificationInputs[$specification->key] ?? '') === '__custom__');
+            $hasCustomNonDimensionSpecification = collect($selectedProduct->category->specifications)
+                ->contains(fn ($specification) => ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true) && ($specificationInputs[$specification->key] ?? '') === '__custom__');
             $matchedVariant = $hasCustomSpecification ? null : $selectedProduct->variants->first(function ($variant) use ($selectedSpecificationValues) {
                 $variantSpecifications = collect($variant->specifications)->sortKeys()->all();
 
@@ -105,10 +107,21 @@
             $hasActiveVariants = $selectedProduct->variants->contains(fn ($variant) => $variant->is_active);
             $hasIncompleteCustomSelection = collect($selectedProduct->category->specifications)->contains(fn ($specification) => ($specificationInputs[$specification->key] ?? '') === '__custom__' && blank($customSpecificationInputs[$specification->key] ?? ''));
             $selectedUnitPrice = $matchedVariant ? (float) $matchedVariant->selling_price : (float) $selectedProduct->selling_price;
+            $usesDimensionPrices = collect($dimensionSets)->contains(fn ($set) => filled($set['diameter'] ?? null));
+            $hasConfiguredSizeOptions = collect($dimensionSets)->contains(fn ($set) => filled($set['shape'] ?? null) || filled($set['length'] ?? null) || filled($set['width'] ?? null));
+            $selectedDiameter = trim($selectedSpecificationValues['diameter_besi'] ?? '');
+            $selectedDimensionSet = collect($dimensionSets)->first(fn ($set) => $selectedDiameter !== ''
+                && mb_strtolower(trim((string) ($set['diameter'] ?? ''))) === mb_strtolower($selectedDiameter));
+            $dimensionPriceAvailable = is_numeric($selectedDimensionSet['price'] ?? null) && (float) $selectedDimensionSet['price'] > 0;
+            if ($usesDimensionPrices) {
+                $selectedUnitPrice = $dimensionPriceAvailable ? (float) $selectedDimensionSet['price'] : 0;
+            }
             $amountForTotal = $selectedProduct->pricing_method === 'weight' ? (float) ($actualWeight ?: 0) : (float) ($quantity ?: 0);
             $canShowPrice = $specificationsComplete
                 && $amountForTotal > 0
+                && (! $hasConfiguredSizeOptions || str_starts_with($sizePresetId, 'dimension:') || $sizePresetId === '__custom__')
                 && (! $hasActiveVariants || $matchedVariant !== null || $hasCustomSpecification)
+                && (! $usesDimensionPrices || $dimensionPriceAvailable)
                 && ! $hasIncompleteCustomSelection;
             $estimatedTotal = $amountForTotal * $selectedUnitPrice;
         @endphp
@@ -120,7 +133,7 @@
                 </div>
                 <div class="pos-selected-product">
                     <img src="{{ $selectedProduct->image_path ? asset('storage/'.$selectedProduct->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $selectedProduct->name }}" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'">
-                    <div><strong>{{ $selectedProduct->name }}</strong><small>{{ $selectedProduct->sku }} · {{ $selectedProduct->category->name }}</small>@if($selectedProduct->brand)<small>{{ $selectedProduct->brand->name }}</small>@endif@if($selectedProduct->description)<small>{{ $selectedProduct->description }}</small>@endif<small>Harga dasar: @rupiah($selectedProduct->selling_price) / {{ $selectedProduct->pricing_method === 'weight' ? 'kg' : ($selectedProduct->pricing_method === 'bar' ? 'batang' : $selectedProduct->unit->abbreviation) }}</small><small>Stok: @quantity($selectedStock) {{ $selectedProduct->pricing_method === 'weight' ? 'kg' : $selectedProduct->unit->abbreviation }}</small></div>
+                    <div><strong>{{ $selectedProduct->name }}</strong><small>{{ $selectedProduct->sku }} · {{ $selectedProduct->category->name }}</small>@if($selectedProduct->brand)<small>{{ $selectedProduct->brand->name }}</small>@endif@if($selectedProduct->description)<small>{{ $selectedProduct->description }}</small>@endif<small>Harga mengikuti ukuran yang dipilih di Atribut Kategori.</small><small>Stok: @quantity($selectedStock) {{ $selectedProduct->pricing_method === 'weight' ? 'kg' : $selectedProduct->unit->abbreviation }}</small></div>
                 </div>
                 @if($selectedStock <= 0)<p class="catalog-error">Stok barang ini habis. Detail tetap bisa dilihat, tetapi barang tidak dapat ditambahkan ke transaksi.</p>@endif
                 <form class="catalog-form pos-item-form" wire:submit="addItem">
@@ -128,7 +141,50 @@
                         <section class="pos-size-picker" aria-labelledby="pos-size-picker-title">
                             <div class="pos-size-picker-heading"><strong id="pos-size-picker-title">Pilih ukuran atau spesifikasi barang</strong><small>Daftar dari kategori {{ $selectedProduct->category->name }}</small></div>
                             <div class="pos-input-grid">
+                                @if($dimensionSets !== [])
+                                    <div class="pos-spec-option-group pos-size-preset-group">
+                                        <span class="pos-spec-option-label">Ukuran</span>
+                                        <div class="pos-spec-options" role="group" aria-label="Pilihan ukuran barang">
+                                            @foreach($dimensionSets as $optionIndex => $dimensionSet)
+                                                @if(filled($dimensionSet['shape'] ?? null) || filled($dimensionSet['length'] ?? null) || filled($dimensionSet['width'] ?? null))
+                                                @php
+                                                    $dimensionLabel = collect([
+                                                        filled($dimensionSet['shape'] ?? '') ? $dimensionSet['shape'] : null,
+                                                        filled($dimensionSet['length'] ?? '') ? 'P '.$dimensionSet['length'] : null,
+                                                        filled($dimensionSet['width'] ?? '') ? 'L '.$dimensionSet['width'] : null,
+                                                    ])->filter()->implode(', ');
+                                                @endphp
+                                                <button type="button" wire:key="pos-size-preset-{{ $optionIndex }}" class="pos-spec-option pos-size-preset {{ $sizePresetId === 'dimension:'.$optionIndex ? 'active' : '' }}" wire:click="selectSizePreset('dimension:{{ $optionIndex }}')" aria-label="Pilih ukuran {{ $optionIndex + 1 }}: {{ $dimensionLabel }}">{{ $dimensionLabel }}</button>
+                                                @endif
+                                            @endforeach
+                                            <button type="button" class="pos-spec-option pos-size-preset pos-custom-size-preset {{ $sizePresetId === '__custom__' ? 'active' : '' }}" wire:click="selectSizePreset('__custom__')">Custom</button>
+                                        </div>
+                                        @if(collect($dimensionSets)->contains(fn ($set) => filled($set['diameter'] ?? null)))
+                                            <span class="pos-spec-option-label mt-3">Diameter besi · harga/kg</span>
+                                            <div class="pos-spec-options" role="group" aria-label="Pilihan diameter besi">
+                                                @php($listedDiameters = [])
+                                                @foreach($dimensionSets as $diameterIndex => $diameterSet)
+                                                    @if(filled($diameterSet['diameter'] ?? null) && !in_array(mb_strtolower($diameterSet['diameter']), $listedDiameters, true))
+                                                        @php($listedDiameters[] = mb_strtolower($diameterSet['diameter']))
+                                                        <button type="button" wire:key="pos-diameter-preset-{{ $diameterIndex }}" class="pos-spec-option {{ $diameterPresetId === 'diameter:'.$diameterIndex ? 'active' : '' }}" wire:click="selectDiameterPreset('diameter:{{ $diameterIndex }}')" aria-label="Pilih diameter {{ $diameterSet['diameter'] }} dengan harga @rupiah($diameterSet['price'] ?? 0) per kg">{{ $diameterSet['diameter'] }} · @rupiah($diameterSet['price'] ?? 0)/kg</button>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                        @error('sizePresetId')<small>{{ $message }}</small>@enderror
+                                        @if($sizePresetId === '__custom__')
+                                            <div class="pos-custom-size-fields">
+                                                @foreach($selectedProduct->category->specifications->whereIn('key', ['bentuk', 'panjang', 'lebar', 'diameter_besi']) as $dimensionSpecification)
+                                                    <label>{{ $dimensionSpecification->name }}@if($dimensionSpecification->measurement_unit) ({{ $dimensionSpecification->measurement_unit }})@endif<input type="{{ in_array($dimensionSpecification->data_type, ['number', 'integer'], true) ? 'number' : 'text' }}" @if($dimensionSpecification->data_type === 'number')step="any"@elseif($dimensionSpecification->data_type === 'integer')step="1"@endif wire:model.live.debounce.250ms="customSpecificationInputs.{{ $dimensionSpecification->key }}" maxlength="500" placeholder="Masukkan {{ strtolower($dimensionSpecification->name) }} custom">@error('specificationInputs.'.$dimensionSpecification->key)<small>{{ $message }}</small>@enderror</label>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
                                 @foreach($selectedProduct->category->specifications as $specification)
+                                    @if($dimensionSets !== [] && in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true))
+                                        @continue
+                                    @endif
                                     @php($specificationSelection = $specificationInputs[$specification->key] ?? '')
                                     <div class="pos-spec-option-group" wire:key="pos-spec-{{ $specification->id }}"><span class="pos-spec-option-label">{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif @if($specification->is_required && ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true))<span aria-hidden="true">*</span>@endif</span>
                                         @if(filled($specification->options))
@@ -152,7 +208,7 @@
                             </div>
                         </section>
                     @endif
-                    @if($hasCustomSpecification)
+                    @if($hasCustomNonDimensionSpecification)
                         <label>Catatan tambahan<textarea rows="2" wire:model="orderNotes" placeholder="Catatan untuk transaksi"></textarea></label>
                     @endif
                     <div class="pos-input-grid">
@@ -169,6 +225,8 @@
                         <div class="pos-estimated-total"><span>Subtotal</span><strong>@rupiah($estimatedTotal)</strong></div>
                     @elseif($hasActiveVariants && $specificationsComplete && !$hasCustomSpecification)
                         <small class="catalog-error">Harga untuk ukuran ini belum diatur admin. Konfigurasikan harga variasi atau custom sebelum melanjutkan.</small>
+                    @elseif($usesDimensionPrices && $specificationsComplete && ! $dimensionPriceAvailable)
+                        <small class="catalog-error">Harga ukuran atau diameter ini belum tersedia. Lengkapi harga per kg di Atribut Kategori.</small>
                     @endif
                     <button class="button-primary add-item-button" type="submit" wire:loading.attr="disabled" wire:target="addItem" @disabled($selectedStock <= 0)>{{ $editingCartKey ? 'Simpan perubahan' : 'Tambahkan ke Keranjang' }}</button>
                 </form>

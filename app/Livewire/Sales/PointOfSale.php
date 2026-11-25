@@ -52,6 +52,8 @@ class PointOfSale extends Component
 
     public string $sizePresetId = '';
 
+    public string $diameterPresetId = '';
+
     public ?string $editingCartKey = null;
 
     public bool $showProductDetails = false;
@@ -120,6 +122,7 @@ class PointOfSale extends Component
     {
         $this->resetValidation();
         $this->orderNotes = '';
+        $selectedDiameter = $this->specificationInputs['diameter_besi'] ?? '';
         $this->specificationInputs = [];
         $this->customSpecificationInputs = [];
 
@@ -131,8 +134,35 @@ class PointOfSale extends Component
 
         if ($value === '__custom__') {
             $this->specificationInputs = $product->category->specifications
+                ->whereIn('key', ['bentuk', 'panjang', 'lebar', 'diameter_besi'])
                 ->mapWithKeys(fn (ProductSpecification $specification): array => [$specification->key => '__custom__'])
                 ->all();
+
+            return;
+        }
+
+        if (str_starts_with($value, 'dimension:')) {
+            $index = filter_var(substr($value, strlen('dimension:')), FILTER_VALIDATE_INT);
+            $dimensionSet = $index === false ? null : ($this->dimensionSetsForCategory($product->category)[$index] ?? null);
+
+            if ($dimensionSet === null) {
+                $this->sizePresetId = '';
+                $this->addError('sizePresetId', 'Ukuran ini sudah tidak tersedia.');
+
+                return;
+            }
+
+            $fieldByKey = [
+                'bentuk' => 'shape',
+                'panjang' => 'length',
+                'lebar' => 'width',
+            ];
+            $this->specificationInputs = $product->category->specifications
+                ->mapWithKeys(fn (ProductSpecification $specification): array => array_key_exists($specification->key, $fieldByKey)
+                    ? [$specification->key => (string) ($dimensionSet[$fieldByKey[$specification->key]] ?? '')]
+                    : [$specification->key => ($specification->key === 'diameter_besi' ? $selectedDiameter : '')])
+                ->all();
+            $this->resetValidation('sizePresetId');
 
             return;
         }
@@ -154,6 +184,34 @@ class PointOfSale extends Component
     {
         $this->sizePresetId = $sizePresetId;
         $this->updatedSizePresetId($sizePresetId);
+    }
+
+    public function selectDiameterPreset(string $diameterPresetId): void
+    {
+        $this->diameterPresetId = $diameterPresetId;
+        $this->updatedDiameterPresetId($diameterPresetId);
+    }
+
+    public function updatedDiameterPresetId(string $value): void
+    {
+        if (! str_starts_with($value, 'diameter:') || $this->productId === null) {
+            return;
+        }
+
+        $index = filter_var(substr($value, strlen('diameter:')), FILTER_VALIDATE_INT);
+        $product = Product::query()->with('category.specifications')->findOrFail($this->productId);
+        $dimensionSet = $index === false ? null : ($this->dimensionSetsForCategory($product->category)[$index] ?? null);
+
+        if ($dimensionSet === null || blank($dimensionSet['diameter'] ?? null)) {
+            $this->diameterPresetId = '';
+            $this->addError('diameterPresetId', 'Diameter ini sudah tidak tersedia.');
+
+            return;
+        }
+
+        $this->specificationInputs['diameter_besi'] = (string) $dimensionSet['diameter'];
+        unset($this->customSpecificationInputs['diameter_besi']);
+        $this->resetValidation('diameterPresetId');
     }
 
     public function clearProductSelection(): void
@@ -192,6 +250,30 @@ class PointOfSale extends Component
             ->where('is_active', true)
             ->findOrFail($validated['productId']);
 
+        if ($this->hasConfiguredSizeOptions($product->category) && ! str_starts_with($this->sizePresetId, 'dimension:') && $this->sizePresetId !== '__custom__') {
+            throw ValidationException::withMessages(['sizePresetId' => 'Pilih ukuran bentuk atau panjang terlebih dahulu.']);
+        }
+        if (collect($this->dimensionSetsForCategory($product->category))->contains(fn (array $set): bool => filled($set['diameter'] ?? null))
+            && ! str_starts_with($this->diameterPresetId, 'diameter:')
+            && ($normalizedDiameter = trim($this->specificationInputs['diameter_besi'] ?? '')) === '') {
+            throw ValidationException::withMessages(['diameterPresetId' => 'Pilih diameter besi terlebih dahulu.']);
+        }
+
+        if (str_starts_with($this->sizePresetId, 'dimension:')) {
+            $dimensionIndex = filter_var(substr($this->sizePresetId, strlen('dimension:')), FILTER_VALIDATE_INT);
+            $dimensionSet = $dimensionIndex === false ? null : ($this->dimensionSetsForCategory($product->category)[$dimensionIndex] ?? null);
+
+            if ($dimensionSet === null) {
+                throw ValidationException::withMessages(['sizePresetId' => 'Pilih ukuran yang masih tersedia.']);
+            }
+
+            foreach (['bentuk' => 'shape', 'panjang' => 'length', 'lebar' => 'width'] as $key => $field) {
+                if (trim($this->specificationInputs[$key] ?? '') !== trim($dimensionSet[$field] ?? '')) {
+                    throw ValidationException::withMessages(['sizePresetId' => 'Pilihan ukuran berubah. Pilih ukuran dari daftar kembali.']);
+                }
+            }
+        }
+
         $normalizedSpecifications = $this->normalizeSpecifications(
             $product->category->specifications,
             $this->specificationInputs,
@@ -215,6 +297,16 @@ class PointOfSale extends Component
 
         $matchedVariant = $this->findMatchingVariant($product, $normalizedSpecifications['values'], $normalizedSpecifications['custom_keys']);
         $unitPrice = $matchedVariant ? (float) $matchedVariant->selling_price : (float) $product->selling_price;
+
+        if ($this->hasConfiguredDiameterPrices($product->category)) {
+            $dimensionPrice = $this->dimensionPriceForSpecifications($product->category, $normalizedSpecifications['values']);
+
+            if ($dimensionPrice === null) {
+                throw ValidationException::withMessages(['sizePresetId' => 'Harga untuk diameter ini belum diatur. Lengkapi harga per kg di Atribut Kategori.']);
+            }
+
+            $unitPrice = $dimensionPrice;
+        }
 
         if ($product->variants->where('is_active', true)->isNotEmpty() && $matchedVariant === null && $normalizedSpecifications['custom_keys'] === []) {
             $this->addError('specificationInputs', 'Harga variasi ini belum diatur admin. Pilih ukuran standar atau minta admin mengatur harga custom.');
@@ -278,7 +370,7 @@ class PointOfSale extends Component
         }
 
         $this->reset([
-            'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width',
+            'productId', 'actualWeight', 'unitPrice', 'diameter', 'shape', 'length', 'width', 'diameterPresetId',
             'customSpecification', 'orderNotes', 'editingCartKey', 'specificationInputs', 'customSpecificationInputs', 'sizePresetId',
         ]);
         $this->showProductDetails = false;
@@ -432,6 +524,10 @@ class PointOfSale extends Component
                     }
 
                     $unitPrice = (float) ($variant?->selling_price ?? $product->selling_price);
+                    if ($this->hasConfiguredDiameterPrices($product->category)) {
+                        $unitPrice = $this->dimensionPriceForSpecifications($product->category, $specificationData['values'])
+                            ?? throw ValidationException::withMessages(['cart' => 'Harga ukuran '.$product->name.' tidak tersedia. Perbarui harga per kg di Atribut Kategori.']);
+                    }
                     $stockQuantity = $pricingBasis === 'weight' ? $weight : $quantity;
                     $unitName = $pricingBasis === 'weight' ? 'kg' : ($product->pricing_method === 'bar' ? 'batang' : $product->unit->abbreviation);
 
@@ -563,12 +659,14 @@ class PointOfSale extends Component
             ->get();
 
         $cartForDisplay = $this->cartForDisplay();
+        $selectedProduct = $this->productId
+            ? Product::query()->with(['brand', 'unit', 'category.specifications', 'inventoryLevels', 'variants'])->find($this->productId)
+            : null;
 
         return view('livewire.sales.point-of-sale', [
             'products' => $products,
-            'selectedProduct' => $this->productId
-                ? Product::query()->with(['brand', 'unit', 'category.specifications', 'inventoryLevels', 'variants'])->find($this->productId)
-                : null,
+            'selectedProduct' => $selectedProduct,
+            'dimensionSets' => $selectedProduct ? $this->dimensionSetsForCategory($selectedProduct->category) : [],
             'categories' => Category::query()->where('is_active', true)->orderBy('name')->get(),
             'cartForDisplay' => $cartForDisplay,
             'subtotal' => round(array_sum(array_column($cartForDisplay, 'line_total')), 2),
@@ -594,7 +692,7 @@ class PointOfSale extends Component
     /** @return array<int, array<string, mixed>> */
     private function cartForDisplay(): array
     {
-        $products = Product::query()->with('variants')->whereIn('id', collect($this->cart)->pluck('product_id'))->get()->keyBy('id');
+        $products = Product::query()->with(['variants', 'category.specifications'])->whereIn('id', collect($this->cart)->pluck('product_id'))->get()->keyBy('id');
 
         return array_map(function (array $item) use ($products): array {
             $product = $products->get($item['product_id']);
@@ -611,6 +709,11 @@ class PointOfSale extends Component
             $hasActiveVariants = $product->variants->contains(fn (ProductVariant $activeVariant): bool => $activeVariant->is_active);
             $item['price_available'] = ! $hasActiveVariants || $variant !== null || ($item['specification_custom_keys'] ?? []) !== [];
             $item['unit_price'] = $item['price_available'] ? (float) ($variant?->selling_price ?? $product->selling_price) : 0;
+            if ($item['price_available'] && $this->hasConfiguredDiameterPrices($product->category)) {
+                $dimensionPrice = $this->dimensionPriceForSpecifications($product->category, $item['specification_values'] ?? []);
+                $item['price_available'] = $dimensionPrice !== null;
+                $item['unit_price'] = $dimensionPrice ?? 0;
+            }
             $amount = $product->pricing_method === 'weight'
                 ? (float) ($item['actual_weight'] ?? 0)
                 : (float) ($item['quantity'] ?? 0);
@@ -665,7 +768,7 @@ class PointOfSale extends Component
 
     private function prepareProductForm(Product $product): void
     {
-        $this->reset(['actualWeight', 'diameter', 'shape', 'length', 'width', 'customSpecification', 'orderNotes', 'sizePresetId']);
+        $this->reset(['actualWeight', 'diameter', 'shape', 'length', 'width', 'customSpecification', 'orderNotes', 'sizePresetId', 'diameterPresetId']);
         $this->specificationInputs = [];
         $this->customSpecificationInputs = [];
         $this->quantity = '';
@@ -683,6 +786,67 @@ class PointOfSale extends Component
         $this->customSpecificationInputs = [];
         $this->quantity = '';
         $this->priceBasis = 'unit';
+    }
+
+    /**
+     * @return array<int, array{shape: string, length: string, width: string, diameter: string}>
+     */
+    private function dimensionSetsForCategory(Category $category): array
+    {
+        if (is_array($category->dimension_sets) && $category->dimension_sets !== []) {
+            return array_map(fn (array $set): array => [...$set, 'price' => ($set['type'] ?? null) === 'size' ? null : (isset($set['price']) && is_numeric($set['price']) ? (float) $set['price'] : null)], $category->dimension_sets);
+        }
+
+        $fieldByKey = [
+            'shape' => 'bentuk',
+            'length' => 'panjang',
+            'width' => 'lebar',
+            'diameter' => 'diameter_besi',
+        ];
+        $specifications = $category->specifications->keyBy('key');
+        $rowCount = max([0, ...array_map(
+            fn (string $key): int => count($specifications->get($key)?->options ?? []),
+            array_values($fieldByKey),
+        )]);
+        $dimensionSets = [];
+
+        for ($index = 0; $index < $rowCount; $index++) {
+            $dimensionSet = [];
+
+            foreach ($fieldByKey as $field => $key) {
+                $dimensionSet[$field] = (string) ($specifications->get($key)?->options[$index] ?? '');
+            }
+
+            if (collect($dimensionSet)->contains(fn (string $value): bool => filled($value))) {
+                $dimensionSet['price'] = null;
+                $dimensionSets[] = $dimensionSet;
+            }
+        }
+
+        return $dimensionSets;
+    }
+
+    /** @param array<string, string> $specifications */
+    private function dimensionPriceForSpecifications(Category $category, array $specifications): ?float
+    {
+        $diameter = trim($specifications['diameter_besi'] ?? '');
+        $dimensionSet = collect($this->dimensionSetsForCategory($category))->first(fn (array $set): bool => $diameter !== ''
+            && mb_strtolower(trim((string) ($set['diameter'] ?? ''))) === mb_strtolower($diameter));
+
+        return isset($dimensionSet['price']) && is_numeric($dimensionSet['price']) && (float) $dimensionSet['price'] > 0
+            ? (float) $dimensionSet['price']
+            : null;
+    }
+
+    private function hasConfiguredDiameterPrices(Category $category): bool
+    {
+        return collect($this->dimensionSetsForCategory($category))->contains(fn (array $set): bool => filled($set['diameter'] ?? null));
+    }
+
+    private function hasConfiguredSizeOptions(Category $category): bool
+    {
+        return collect($this->dimensionSetsForCategory($category))->contains(fn (array $set): bool => collect(['shape', 'length', 'width'])
+            ->contains(fn (string $field): bool => filled($set[$field] ?? null)));
     }
 
     /**
