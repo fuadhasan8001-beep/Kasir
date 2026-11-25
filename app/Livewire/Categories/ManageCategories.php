@@ -39,12 +39,12 @@ class ManageCategories extends Component
 
     public string $specificationOptions = '';
 
-    /** @var array{shape: string, length: string, width: string, diameter: string} */
+    /** @var array{shape: array<int, string>, length: array<int, string>, width: array<int, string>, diameter: array<int, string>} */
     public array $dimensionOptions = [
-        'shape' => '',
-        'length' => '',
-        'width' => '',
-        'diameter' => '',
+        'shape' => [''],
+        'length' => [''],
+        'width' => [''],
+        'diameter' => [''],
     ];
 
     public bool $specificationAllowCustom = false;
@@ -127,11 +127,49 @@ class ManageCategories extends Component
         $specifications = $category->specifications()->whereIn('key', ['bentuk', 'panjang', 'lebar', 'diameter_besi'])->get()->keyBy('key');
 
         $this->dimensionOptions = [
-            'shape' => implode("\n", $specifications->get('bentuk')?->options ?? []),
-            'length' => implode("\n", $specifications->get('panjang')?->options ?? []),
-            'width' => implode("\n", $specifications->get('lebar')?->options ?? []),
-            'diameter' => implode("\n", $specifications->get('diameter_besi')?->options ?? []),
+            'shape' => array_values($specifications->get('bentuk')?->options ?? ['']),
+            'length' => array_values($specifications->get('panjang')?->options ?? ['']),
+            'width' => array_values($specifications->get('lebar')?->options ?? ['']),
+            'diameter' => array_values($specifications->get('diameter_besi')?->options ?? ['']),
         ];
+
+        foreach ($this->dimensionOptions as $field => $options) {
+            if ($options === []) {
+                $this->dimensionOptions[$field] = [''];
+            }
+        }
+    }
+
+    public function addDimensionOption(string $field): void
+    {
+        abort_unless(array_key_exists($field, $this->dimensionOptions), 404);
+
+        if (count($this->dimensionOptions[$field]) >= 100) {
+            $this->addError('dimensionOptions.'.$field, 'Maksimal 100 pilihan untuk setiap ukuran.');
+
+            return;
+        }
+
+        $this->dimensionOptions[$field][] = '';
+        $this->resetValidation('dimensionOptions.'.$field);
+    }
+
+    public function removeDimensionOption(string $field, int $index): void
+    {
+        abort_unless(array_key_exists($field, $this->dimensionOptions), 404);
+
+        if (! array_key_exists($index, $this->dimensionOptions[$field])) {
+            return;
+        }
+
+        unset($this->dimensionOptions[$field][$index]);
+        $this->dimensionOptions[$field] = array_values($this->dimensionOptions[$field]);
+
+        if ($this->dimensionOptions[$field] === []) {
+            $this->dimensionOptions[$field] = [''];
+        }
+
+        $this->resetValidation('dimensionOptions.'.$field);
     }
 
     public function saveDimensionOptions(): void
@@ -139,10 +177,14 @@ class ManageCategories extends Component
         $validated = $this->validate([
             'specificationCategoryId' => ['required', 'integer', 'exists:categories,id'],
             'dimensionOptions' => ['required', 'array'],
-            'dimensionOptions.shape' => ['nullable', 'string', 'max:5000'],
-            'dimensionOptions.length' => ['nullable', 'string', 'max:5000'],
-            'dimensionOptions.width' => ['nullable', 'string', 'max:5000'],
-            'dimensionOptions.diameter' => ['nullable', 'string', 'max:5000'],
+            'dimensionOptions.shape' => ['required', 'array', 'max:100'],
+            'dimensionOptions.shape.*' => ['nullable', 'string', 'max:120'],
+            'dimensionOptions.length' => ['required', 'array', 'max:100'],
+            'dimensionOptions.length.*' => ['nullable', 'string', 'max:120'],
+            'dimensionOptions.width' => ['required', 'array', 'max:100'],
+            'dimensionOptions.width.*' => ['nullable', 'string', 'max:120'],
+            'dimensionOptions.diameter' => ['required', 'array', 'max:100'],
+            'dimensionOptions.diameter.*' => ['nullable', 'string', 'max:120'],
         ]);
 
         $definitions = [
@@ -154,8 +196,8 @@ class ManageCategories extends Component
         $normalizedOptions = [];
 
         foreach ($definitions as $field => $definition) {
-            $options = collect(preg_split('/\r\n|\r|\n/', $validated['dimensionOptions'][$field] ?? '') ?: [])
-                ->map(fn (string $option): string => trim($option))
+            $options = collect($validated['dimensionOptions'][$field] ?? [])
+                ->map(fn (?string $option): string => trim($option ?? ''))
                 ->filter()
                 ->unique()
                 ->values();
@@ -216,7 +258,7 @@ class ManageCategories extends Component
         });
 
         foreach ($definitions as $field => $definition) {
-            $this->dimensionOptions[$field] = implode("\n", $normalizedOptions[$field][1]->all()) ?: $this->dimensionOptions[$field];
+            $this->dimensionOptions[$field] = $normalizedOptions[$field][1]->all() ?: [''];
         }
 
         session()->flash('status', 'Daftar bentuk dan ukuran berhasil disimpan untuk menu Kasir.');
