@@ -196,7 +196,7 @@
                 </div>
                 <form class="sidebar-logout-form" method="POST" action="{{ route('logout') }}" onsubmit="return confirm('Yakin mau keluar?')">
                     @csrf
-                    <button type="submit">Logout</button>
+                    <button type="submit"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M10 17l5-5-5-5M15 12H3m9-8h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/></svg>Logout</button>
                 </form>
             </div>
         </aside>

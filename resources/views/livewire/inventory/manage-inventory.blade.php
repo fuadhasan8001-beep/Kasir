@@ -12,7 +12,7 @@
             <form class="catalog-form" wire:submit="saveMovement">
                 <label>Barang<select wire:model="productId"><option value="">Pilih barang</option>@foreach ($movementProducts as $product)<option value="{{ $product->id }}">{{ $product->name }} ({{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }})</option>@endforeach</select>@error('productId')<small>{{ $message }}</small>@enderror</label>
                 <label>Jenis perubahan<select wire:model="movementType"><option value="in">Barang jadi masuk / produksi selesai</option><option value="out">Barang jadi keluar</option><option value="adjustment">Penyesuaian (selisih stok)</option></select></label>
-                <label>{{ $movementType === 'adjustment' ? 'Selisih stok (+/-)' : 'Jumlah' }}<input type="number" step="0.001" wire:model="quantity" placeholder="Masukkan jumlah"><small>Stok di sini adalah barang jadi yang sudah selesai dan siap dijual.</small>@error('quantity')<small>{{ $message }}</small>@enderror</label>
+                <label>{{ $movementType === 'adjustment' ? 'Selisih stok (+/-)' : 'Jumlah' }}<input type="number" step="0.001" wire:model="quantity" placeholder="Masukkan jumlah"><small class="form-hint">Stok yang dicatat adalah barang jadi yang siap dijual.</small>@error('quantity')<small>{{ $message }}</small>@enderror</label>
                 <label>Alasan / keterangan perubahan<textarea rows="2" wire:model="notes" placeholder="Contoh: hasil produksi selesai, stok opname, atau alasan barang keluar"></textarea>@error('notes')<small>{{ $message }}</small>@enderror</label>
                 <button class="button-primary" type="submit" wire:loading.attr="disabled">Simpan perubahan stok</button>
             </form>
