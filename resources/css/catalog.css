@@ -521,6 +521,54 @@ html, body {
     color: var(--ui-warning);
 }
 
+.purchase-success-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1400;
+    display: flex;
+    width: min(420px, calc(100vw - 32px));
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 14px 16px;
+    border: 1px solid #cbe7d5;
+    border-radius: 14px;
+    background: #f3fbf6;
+    box-shadow: 0 16px 40px rgb(16 50 30 / 18%);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-12px) scale(.98);
+    transition: opacity .22s ease, transform .22s ease;
+}
+
+.purchase-success-toast.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.purchase-success-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    place-items: center;
+    border-radius: 50%;
+    color: #fff;
+    background: #278653;
+}
+
+.purchase-success-icon svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.purchase-success-copy { min-width: 0; flex: 1; }
+.purchase-success-copy strong { color: #185c38; font-size: .88rem; }
+.purchase-success-copy p { margin: 3px 0 0; color: #587565; font-size: .76rem; line-height: 1.4; }
+.purchase-success-close { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 0; border-radius: 8px; color: #587565; background: transparent; font-size: 1.3rem; cursor: pointer; }
+.purchase-success-close:hover { background: #e5f3e9; }
+
+@media (prefers-reduced-motion: reduce) {
+    .purchase-success-toast { transition: none; }
+}
+
 /* Print receipt */
 .print-receipt {
     display: none;

@@ -31,6 +31,8 @@ class ManageCategories extends Component
 
     public ?int $editingDimensionSetIndex = null;
 
+    public ?string $editingDimensionType = null;
+
     public int $dimensionFormKey = 0;
 
     /** @var array<int, array{shape: string, length: string, width: string, diameter: string}> */
@@ -131,6 +133,7 @@ class ManageCategories extends Component
     {
         $this->specificationCategoryId = $category->id;
         $this->editingDimensionSetIndex = null;
+        $this->editingDimensionType = null;
         $this->storedDimensionSets = $this->dimensionSetsForCategory($category);
         $this->resetDimensionOptions();
         $this->dimensionFormKey++;
@@ -173,9 +176,32 @@ class ManageCategories extends Component
         abort_unless($index >= 0 && array_key_exists($index, $this->storedDimensionSets), 404);
 
         $this->editingDimensionSetIndex = $index;
+        $this->editingDimensionType = 'size';
         foreach (array_keys($this->dimensionOptions) as $field) {
-            $this->dimensionOptions[$field] = [$this->storedDimensionSets[$index][$field] ?? ''];
+            $this->dimensionOptions[$field] = in_array($field, ['shape', 'length', 'width'], true)
+                ? [$this->storedDimensionSets[$index][$field] ?? '']
+                : [''];
         }
+        $this->dimensionFormKey++;
+        $this->resetValidation();
+    }
+
+    public function editDiameterOption(int $index): void
+    {
+        abort_if($this->specificationCategoryId === null, 404);
+
+        $category = Category::query()->with('specifications')->findOrFail($this->specificationCategoryId);
+        $this->storedDimensionSets = $this->dimensionSetsForCategory($category);
+        abort_unless($index >= 0 && array_key_exists($index, $this->storedDimensionSets), 404);
+        abort_unless(filled($this->storedDimensionSets[$index]['diameter'] ?? null), 404);
+
+        $this->editingDimensionSetIndex = $index;
+        $this->editingDimensionType = 'diameter';
+        foreach (['shape', 'length', 'width'] as $field) {
+            $this->dimensionOptions[$field] = [''];
+        }
+        $this->dimensionOptions['diameter'] = [$this->storedDimensionSets[$index]['diameter']];
+        $this->dimensionOptions['price'] = [(string) ($this->storedDimensionSets[$index]['price'] ?? 0)];
         $this->dimensionFormKey++;
         $this->resetValidation();
     }
@@ -183,6 +209,7 @@ class ManageCategories extends Component
     public function cancelDimensionSetEdit(): void
     {
         $this->editingDimensionSetIndex = null;
+        $this->editingDimensionType = null;
         $this->resetDimensionOptions();
         $this->dimensionFormKey++;
         $this->resetValidation();
@@ -206,6 +233,13 @@ class ManageCategories extends Component
 
     public function addDiameterOption(): void
     {
+        if ($this->editingDimensionSetIndex !== null) {
+            $this->editingDimensionSetIndex = null;
+            $this->editingDimensionType = null;
+            $this->resetDimensionOptions();
+            $this->dimensionFormKey++;
+        }
+
         if (count($this->dimensionOptions['diameter']) >= 100) {
             $this->addError('dimensionOptions.diameter', 'Maksimal 100 pilihan diameter.');
 
@@ -230,8 +264,9 @@ class ManageCategories extends Component
         $this->resetValidation(['dimensionOptions.diameter', 'dimensionOptions.price']);
     }
 
-    public function saveDimensionOptions(): void
+    public function saveDimensionOptions(string $type = 'all'): void
     {
+        abort_unless(in_array($type, ['all', 'size', 'diameter'], true), 404);
         $validated = $this->validate([
             'specificationCategoryId' => ['required', 'integer', 'exists:categories,id'],
             'dimensionOptions' => ['required', 'array'],
@@ -255,7 +290,7 @@ class ManageCategories extends Component
         ];
         $sizeFields = ['shape', 'length', 'width'];
         $sizeRowCount = max(array_map(fn (string $field): int => count($validated['dimensionOptions'][$field]), $sizeFields));
-        $submittedDimensionSets = collect(range(0, $sizeRowCount - 1))
+        $submittedDimensionSets = $type === 'diameter' ? collect() : collect(range(0, $sizeRowCount - 1))
             ->map(fn (int $index): array => ['type' => 'size', ...collect($sizeFields)
                 ->mapWithKeys(fn (string $field): array => [$field => trim($validated['dimensionOptions'][$field][$index] ?? '')])
                 ->put('diameter', '')
@@ -264,13 +299,13 @@ class ManageCategories extends Component
             ->filter(fn (array $set): bool => collect($set)->except('type')->contains(fn (string $value): bool => $value !== ''))
             ->values();
 
-        foreach ($validated['dimensionOptions']['diameter'] as $index => $diameter) {
+        foreach ($type === 'size' ? [] : $validated['dimensionOptions']['diameter'] as $index => $diameter) {
             if (filled($diameter) && (float) ($validated['dimensionOptions']['price'][$index] ?? 0) <= 0) {
                 throw ValidationException::withMessages(['dimensionOptions.price.'.$index => 'Isi harga per kg untuk diameter ini.']);
             }
         }
 
-        $submittedDimensionSets = $submittedDimensionSets->concat(collect($validated['dimensionOptions']['diameter'])
+        $submittedDimensionSets = $submittedDimensionSets->concat($type === 'size' ? collect() : collect($validated['dimensionOptions']['diameter'])
             ->map(fn (string $diameter, int $index): array => [
                 'type' => 'diameter',
                 'shape' => '',
@@ -292,6 +327,9 @@ class ManageCategories extends Component
         $dimensionSets = collect($this->dimensionSetsForCategory($category));
 
         if ($this->editingDimensionSetIndex !== null) {
+            if ($this->editingDimensionType !== $type) {
+                throw ValidationException::withMessages(['dimensionOptions' => 'Jenis atribut yang diedit tidak sesuai.']);
+            }
             if (! $dimensionSets->has($this->editingDimensionSetIndex)) {
                 throw ValidationException::withMessages(['dimensionOptions' => 'Ukuran yang dipilih sudah tidak tersedia. Buka ulang daftar ukuran.']);
             }
@@ -380,9 +418,12 @@ class ManageCategories extends Component
         $this->resetDimensionOptions();
 
         $this->editingDimensionSetIndex = null;
+        $this->editingDimensionType = null;
         $this->dimensionFormKey++;
 
-        session()->flash('status', 'Daftar bentuk dan ukuran berhasil disimpan untuk menu Kasir.');
+        session()->flash('status', $type === 'diameter'
+            ? 'Daftar diameter dan harga per kg berhasil disimpan untuk menu Kasir.'
+            : 'Daftar bentuk dan ukuran berhasil disimpan untuk menu Kasir.');
     }
 
     private function resetDimensionOptions(): void
@@ -585,8 +626,7 @@ class ManageCategories extends Component
                 ])
                 ->filter(fn (array $field): bool => filled($field['value']))
                 ->all())
-            ->filter()
-            ->values();
+            ->filter();
 
         if ($savedDimensionSets->isEmpty() && $selectedCategory !== null) {
             $legacyDimensionOptions = $selectedCategory->specifications->keyBy('key');
@@ -604,8 +644,7 @@ class ManageCategories extends Component
                     ])
                     ->filter(fn (array $field): bool => filled($field['value']))
                     ->all())
-                ->filter()
-                ->values();
+                ->filter();
             if ($savedDiameterOptions->isEmpty()) {
                 $savedDiameterOptions = collect($legacyDimensionOptions->get('diameter_besi')?->options ?? [])
                     ->map(fn (string $diameter, int $index): array => ['diameter' => $diameter, 'price' => 0, 'index' => $index])

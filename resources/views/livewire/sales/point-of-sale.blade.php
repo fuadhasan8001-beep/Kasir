@@ -1,4 +1,9 @@
 <div class="pos-page">
+    <div id="purchase-success-toast" class="purchase-success-toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true">
+        <span class="purchase-success-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m5 12.5 4.5 4.5L19 7"/></svg></span>
+        <div class="purchase-success-copy"><strong>Pembelian berhasil!</strong><p id="purchase-success-message">Barang berhasil ditambahkan ke transaksi.</p></div>
+        <button class="purchase-success-close" type="button" aria-label="Tutup pemberitahuan" data-dismiss-purchase-toast>&times;</button>
+    </div>
     @if (session('status'))
         <div class="notice-card"><div><strong>{{ session('status') }}</strong></div></div>
     @endif
@@ -228,7 +233,7 @@
                     @elseif($usesDimensionPrices && $specificationsComplete && ! $dimensionPriceAvailable)
                         <small class="catalog-error">Harga ukuran atau diameter ini belum tersedia. Lengkapi harga per kg di Atribut Kategori.</small>
                     @endif
-                    <button class="button-primary add-item-button" type="submit" wire:loading.attr="disabled" wire:target="addItem" @disabled($selectedStock <= 0)>{{ $editingCartKey ? 'Simpan perubahan' : 'Tambahkan ke Keranjang' }}</button>
+                    <button class="button-primary add-item-button" type="submit" data-purchase-submit wire:loading.attr="disabled" wire:target="addItem" @disabled($selectedStock <= 0)>{{ $editingCartKey ? 'Simpan perubahan' : 'Tambah pembelian' }}</button>
                 </form>
             </section>
         </div>

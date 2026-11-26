@@ -80,11 +80,15 @@ class TransactionHistory extends Component
 
     public function render(): View
     {
+        $activeCartItems = session()->get('cashier.cart.'.auth()->id().'.items', []);
+
         return view('livewire.sales.transaction-history', [
             'sales' => $this->filteredSalesQuery()->with(['user', 'items'])->latest()->paginate(15),
             'canViewProfit' => true,
             'transactionCount' => $this->filteredSalesQuery()->count(),
             'totalValue' => (float) $this->filteredSalesQuery()->sum('total'),
+            'activeCartItems' => $activeCartItems,
+            'activeCartTotal' => round(array_sum(array_column($activeCartItems, 'line_total')), 2),
         ]);
     }
 

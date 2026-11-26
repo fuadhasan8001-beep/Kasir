@@ -234,6 +234,8 @@ class PointOfSale extends Component
 
     public function addItem(): void
     {
+        $wasEditing = $this->editingCartKey !== null;
+
         $validated = $this->validate([
             'productId' => ['required', 'integer', 'exists:products,id'],
             'quantity' => ['nullable', 'numeric', 'decimal:0,3', 'gt:0', 'max:999999999'],
@@ -378,6 +380,9 @@ class PointOfSale extends Component
         $this->priceBasis = 'unit';
         $this->resetValidation();
         $this->persistCart();
+        $this->dispatch('purchase-added', message: $wasEditing
+            ? 'Perubahan pembelian berhasil disimpan.'
+            : 'Pembelian '.$product->name.' berhasil ditambahkan.');
     }
 
     public function editItem(string $key): void

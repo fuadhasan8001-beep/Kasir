@@ -15,7 +15,20 @@
                     <td><div class="flex items-start gap-3"><img class="product-thumb" src="{{ $product->image_path ? asset('storage/'.$product->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $product->name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'"><div><div class="font-medium text-neutral-900">{{ $product->name }}</div><div class="mt-1 text-xs text-neutral-500">{{ $product->sku }}</div>@if($product->brand)<div class="mt-1 text-xs text-neutral-500">{{ $product->brand->name }}</div>@endif
                     </div></div></td>
                     <td>{{ $product->category->name }}</td>
-                    <td>{{ $product->category->dimension_sets ? 'Mengikuti harga ukuran' : 'Atur di Atribut Kategori' }}</td>
+                    @php($diameterPrices = collect($product->category->dimension_sets ?? [])->filter(fn (array $set): bool => filled($set['diameter'] ?? null)))
+                    <td>
+                        @if($diameterPrices->isNotEmpty())
+                            <div class="space-y-1">
+                                @foreach($diameterPrices as $diameterPrice)
+                                    <div>{{ $diameterPrice['diameter'] }} · @rupiah($diameterPrice['price'] ?? 0)/kg</div>
+                                @endforeach
+                            </div>
+                        @elseif($product->category->dimension_sets)
+                            Mengikuti harga ukuran
+                        @else
+                            Atur di Atribut Kategori
+                        @endif
+                    </td>
                     <td>{{ $product->unit->name }} <span class="text-xs text-neutral-500">({{ $product->unit->abbreviation }})</span></td>
                     @php($stock = (float) ($product->inventoryLevels->firstWhere('inventory_type', 'finished')?->quantity ?? 0))
                     <td>@quantity($stock) {{ $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation }}</td>

@@ -64,6 +64,8 @@
                 @error('specification')<p class="catalog-error mb-3">{{ $message }}</p>@enderror
                 <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.8fr)]">
                     <div class="divide-y divide-neutral-100">
+                        <section class="py-3">
+                        <h3 class="text-sm font-semibold">Ukuran barang</h3>
                         @forelse($savedDimensionSets as $setIndex => $dimensionSet)
                             <div class="flex items-center justify-between gap-3 py-3" wire:key="saved-dimension-set-{{ $setIndex }}">
                                 <div>
@@ -74,27 +76,32 @@
                                         @endforeach
                                     </div>
                                 </div>
-                                <button class="button-secondary button-small" wire:click="editDimensionSet({{ $setIndex }})" type="button">Ubah</button>
+                                <button class="button-secondary button-small" wire:click="editDimensionSet({{ $setIndex }})" type="button">Edit</button>
                             </div>
                         @empty
-                            <div class="py-7 text-center text-sm text-neutral-500">Belum ada ukuran.</div>
+                            <div class="py-4 text-sm text-neutral-500">Belum ada ukuran.</div>
                         @endforelse
-                        @if($savedDiameterOptions->isNotEmpty())
-                            <section class="py-3">
-                                <strong class="text-sm">Diameter besi · harga per kg</strong>
-                                <div class="mt-2 flex flex-wrap gap-2">
-                                    @foreach($savedDiameterOptions as $diameterOption)
-                                        <button class="rounded-full bg-neutral-100 px-3 py-1.5 text-xs text-neutral-700" wire:click="editDimensionSet({{ $diameterOption['index'] }})" type="button">{{ $diameterOption['diameter'] }} · @rupiah($diameterOption['price'])/kg</button>
-                                    @endforeach
-                                </div>
-                            </section>
-                        @endif
+                        </section>
+                        <section class="py-3">
+                            <strong class="text-sm">Diameter besi · harga per kg</strong>
+                            <div class="divide-y divide-neutral-100">
+                                @forelse($savedDiameterOptions as $diameterOption)
+                                    <div class="flex items-center justify-between gap-3 py-3" wire:key="saved-diameter-option-{{ $diameterOption['index'] }}">
+                                        <span class="rounded-md bg-neutral-100 px-2 py-1 text-xs text-neutral-600">{{ $diameterOption['diameter'] }} · @rupiah($diameterOption['price'])/kg</span>
+                                        <button class="button-secondary button-small" wire:click="editDiameterOption({{ $diameterOption['index'] }})" type="button">Edit</button>
+                                    </div>
+                                @empty
+                                    <span class="text-sm text-neutral-500">Belum ada diameter.</span>
+                                @endforelse
+                            </div>
+                        </section>
                     </div>
                     <div class="space-y-4">
-                        <form wire:key="dimension-form-{{ $dimensionFormKey }}" wire:submit="saveDimensionOptions" class="catalog-form rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                            <h3 class="mb-1 text-sm font-semibold">Bentuk dan ukuran barang</h3>
-                            <p class="mb-3 text-xs text-neutral-500">Isi atribut ukuran, lalu simpan. Ukuran yang tersimpan bisa dipilih dari panel kiri untuk diedit.</p>
+                        <div wire:key="dimension-form-{{ $dimensionFormKey }}" class="catalog-form rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                            <h3 class="mb-1 text-sm font-semibold">{{ $editingDimensionType === 'diameter' ? 'Daftar diameter besi dan harga/kg' : 'Bentuk dan ukuran barang' }}</h3>
+                            <p class="mb-3 text-xs text-neutral-500">Isi atributnya lalu simpan. Pilih data di panel kiri untuk mengeditnya.</p>
                             <div class="dimension-set-list">
+                                @if($editingDimensionType !== 'diameter')
                                 @foreach(range(0, max(array_map('count', collect($dimensionOptions)->only(['shape', 'length', 'width'])->all())) - 1) as $optionIndex)
                                     <div class="dimension-set-card" wire:key="dimension-set-{{ $dimensionFormKey }}-{{ $optionIndex }}">
                                         <div class="dimension-set-card-heading"><strong>{{ $editingDimensionSetIndex !== null ? 'Ubah ukuran '.($editingDimensionSetIndex + 1) : 'Atribut ukuran' }}</strong>@if($editingDimensionSetIndex === null && max(array_map('count', collect($dimensionOptions)->only(['shape', 'length', 'width'])->all())) > 1)<button class="dimension-option-remove" wire:click="removeDimensionRow({{ $optionIndex }})" type="button" aria-label="Hapus ukuran">&times;</button>@endif</div>
@@ -105,6 +112,8 @@
                                         </div>
                                     </div>
                                 @endforeach
+                                @endif
+                                @if($editingDimensionType !== 'size')
                                 <div class="dimension-set-card" wire:key="diameter-list-{{ $dimensionFormKey }}">
                                     <div class="dimension-set-card-heading"><strong>Daftar diameter besi dan harga/kg</strong></div>
                                     @foreach(range(0, max(array_map('count', [$dimensionOptions['diameter'], $dimensionOptions['price']])) - 1) as $diameterIndex)
@@ -114,22 +123,26 @@
                                             @if($diameterIndex > 0 || filled($dimensionOptions['diameter'][$diameterIndex] ?? null))<button class="dimension-option-remove" wire:click="removeDiameterOption({{ $diameterIndex }})" type="button" aria-label="Hapus diameter">&times;</button>@endif
                                         </div>
                                     @endforeach
-                                    <button class="dimension-option-add mt-3" wire:click="addDiameterOption" type="button">+ Tambah diameter</button>
+                                    @if($editingDimensionType !== 'diameter')
+                                        <button class="dimension-option-add mt-3" wire:click="addDiameterOption" type="button">+ Tambah diameter</button>
+                                    @endif
                                 </div>
+                                @endif
                             </div>
                             <div class="flex flex-wrap gap-2">
                                 @if($editingDimensionSetIndex !== null)
                                     <button class="button-secondary" wire:click="cancelDimensionSetEdit" type="button">Batal edit</button>
                                 @endif
-                                <button class="dimension-option-add" wire:click="addDimensionRow" type="button">+ Tambah ukuran</button>
+                                @if($editingDimensionType !== 'diameter')<button class="dimension-option-add" wire:click="addDimensionRow" type="button">+ Tambah ukuran</button>@endif
                             </div>
                             @error('dimensionOptions')<small>{{ $message }}</small>@enderror
                             @foreach(['shape', 'length', 'width', 'diameter', 'price'] as $field)
                                 @error('dimensionOptions.'.$field)<small>{{ $message }}</small>@enderror
                             @endforeach
                             @error('specificationCategoryId')<small class="catalog-error">{{ $message }}</small>@enderror
-                            <button class="button-primary" type="submit">{{ $editingDimensionSetIndex === null ? 'Simpan bentuk dan ukuran' : 'Simpan perubahan ukuran' }}</button>
-                        </form>
+                            @if($editingDimensionType !== 'diameter')<button class="button-primary" wire:click="saveDimensionOptions('size')" type="button">{{ $editingDimensionType === 'size' ? 'Simpan perubahan ukuran' : 'Simpan ukuran' }}</button>@endif
+                            @if($editingDimensionType !== 'size')<button class="button-primary" wire:click="saveDimensionOptions('diameter')" type="button">{{ $editingDimensionType === 'diameter' ? 'Simpan perubahan diameter' : 'Simpan diameter' }}</button>@endif
+                        </div>
 
 
                     </div>

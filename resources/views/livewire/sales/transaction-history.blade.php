@@ -1,5 +1,35 @@
 <div class="catalog-panel transaction-history records-panel">
     <div class="history-summary"><article><span>Transaksi</span><strong>{{ number_format($transactionCount, 0, ",", ".") }}</strong></article><article><span>Total nilai</span><strong>@rupiah($totalValue)</strong></article></div>
+    @if($activeCartItems !== [])
+        <section class="mb-5 rounded-lg border border-neutral-200 bg-neutral-50 p-4" aria-labelledby="active-purchase-title">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 id="active-purchase-title" class="text-sm font-semibold text-neutral-900">Pembelian berjalan</h2>
+                    <p class="mt-1 text-xs text-neutral-500">Barang dari Kasir tersimpan di sini sampai pembayaran diselesaikan.</p>
+                </div>
+                <a class="button-primary button-small" href="{{ route('kasir.cart') }}">Lanjutkan pembelian</a>
+            </div>
+            <div class="mt-3 divide-y divide-neutral-200">
+                @foreach($activeCartItems as $activeCartItem)
+                    <div class="flex flex-wrap items-center justify-between gap-2 py-2" wire:key="active-purchase-{{ $activeCartItem['key'] }}">
+                        <div>
+                            <strong class="text-sm text-neutral-800">{{ $activeCartItem['product_name'] }}</strong>
+                            <div class="text-xs text-neutral-500">
+                                @if($activeCartItem['pricing_basis'] === 'weight')
+                                    @quantity($activeCartItem['actual_weight']) kg
+                                @else
+                                    @quantity($activeCartItem['quantity']) {{ $activeCartItem['unit_name'] }}
+                                @endif
+                                @if($activeCartItem['specifications']) · {{ collect($activeCartItem['specifications'])->map(fn ($value, $key) => $key.': '.$value)->implode(' · ') }}@endif
+                            </div>
+                        </div>
+                        <span class="text-sm font-semibold text-neutral-800">@rupiah($activeCartItem['line_total'])</span>
+                    </div>
+                @endforeach
+            </div>
+            <div class="mt-3 flex justify-between border-t border-neutral-200 pt-3 text-sm font-semibold"><span>Total pembelian berjalan</span><span>@rupiah($activeCartTotal)</span></div>
+        </section>
+    @endif
     <div class="filter-row">
         <label class="history-search">Cari invoice<input class="catalog-input" type="search" wire:model.live.debounce.300ms="search" placeholder="INV-…"></label>
         <label>Nama pembeli<input class="catalog-input" type="search" wire:model.live.debounce.300ms="customerName" placeholder="Nama pembeli"></label>
