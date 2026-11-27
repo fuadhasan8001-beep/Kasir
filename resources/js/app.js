@@ -19,11 +19,19 @@ document.addEventListener('click', (event) => {
 }, true);
 
 window.addEventListener('purchase-added', (event) => {
+    showPurchaseToast(event.detail.message || 'Barang berhasil ditambahkan ke transaksi.');
+});
+
+window.addEventListener('purchase-completed', (event) => {
+    showPurchaseToast(event.detail.message || 'Pembayaran berhasil disimpan.');
+});
+
+function showPurchaseToast(messageText) {
     const toast = document.getElementById('purchase-success-toast');
     const message = document.getElementById('purchase-success-message');
 
     if (toast && message) {
-        message.textContent = event.detail.message || 'Barang berhasil ditambahkan ke transaksi.';
+        message.textContent = messageText;
         toast.classList.add('is-visible');
         toast.setAttribute('aria-hidden', 'false');
         window.clearTimeout(purchaseToastTimer);
@@ -34,7 +42,7 @@ window.addEventListener('purchase-added', (event) => {
     }
 
     playPurchaseChime();
-});
+}
 
 document.addEventListener('click', (event) => {
     if (!event.target.closest('[data-dismiss-purchase-toast]')) {

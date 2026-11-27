@@ -647,6 +647,7 @@ class PointOfSale extends Component
         $this->showProductDetails = false;
         $this->editingCartKey = null;
         session()->flash('status', 'Transaksi berhasil disimpan.');
+        $this->dispatch('purchase-completed', message: 'Pembayaran berhasil! Invoice '.$sale->invoice_number.' · Total Rp '.number_format((float) $sale->total, 0, ',', '.'));
     }
 
     public function render(): View

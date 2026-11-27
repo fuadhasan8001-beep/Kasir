@@ -251,7 +251,7 @@
                 </div>
                 <label class="cash-input-label">Uang tunai diterima<input class="catalog-input" type="number" min="{{ $subtotal }}" step="1" wire:model.live="amountReceived" placeholder="Masukkan nominal">@error('amountReceived')<small class="catalog-error">{{ $message }}</small>@enderror</label>
                 <div class="change-summary"><span>Kembalian</span><strong>@rupiah(max(0, (float) $amountReceived - $subtotal))</strong></div>
-                <div class="modal-actions"><button class="button-secondary" type="button" wire:click="cancelCheckout">Kembali</button><button class="button-primary" type="button" wire:click="checkout" wire:loading.attr="disabled" wire:target="checkout">Konfirmasi &amp; simpan</button></div>
+                <div class="modal-actions"><button class="button-secondary" type="button" wire:click="cancelCheckout">Kembali</button><button class="button-primary" type="button" data-purchase-submit wire:click="checkout" wire:loading.attr="disabled" wire:target="checkout">Beli sekarang</button></div>
             </section>
         </div>
     @endif

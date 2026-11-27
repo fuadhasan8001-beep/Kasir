@@ -64,9 +64,35 @@
                 <form method="POST" action="{{ route('profile.password') }}" class="catalog-form profile-form profile-password-form">
                     @csrf
                     @method('PUT')
-                    <label>Kata sandi saat ini<input name="current_password" type="password" autocomplete="current-password" required>@error('current_password')<small>{{ $message }}</small>@enderror</label>
-                    <label>Kata sandi baru<input name="password" type="password" autocomplete="new-password" minlength="8" required>@error('password')<small>{{ $message }}</small>@enderror</label>
-                    <label>Konfirmasi kata sandi baru<input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required></label>
+                    <label>Kata sandi saat ini
+                        <div class="profile-password-input-wrap" x-data="{ visible: false }">
+                            <input name="current_password" x-bind:type="visible ? 'text' : 'password'" autocomplete="current-password" required>
+                            <button class="password-toggle" type="button" x-on:click="visible = ! visible" x-bind:class="{ 'is-visible': visible }" x-bind:aria-pressed="visible.toString()" x-bind:aria-label="visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'">
+                                <svg class="eye" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.3-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.3 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 3 18 18M10.6 5.6A9.5 9.5 0 0 1 12 5.5c6.2 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.2 6.2A15.4 15.4 0 0 0 2.5 12s3.3 6.5 9.5 6.5a9.5 9.5 0 0 0 4-.9"/></svg>
+                            </button>
+                        </div>
+                        @error('current_password')<small>{{ $message }}</small>@enderror
+                    </label>
+                    <label>Kata sandi baru
+                        <div class="profile-password-input-wrap" x-data="{ visible: false }">
+                            <input name="password" x-bind:type="visible ? 'text' : 'password'" autocomplete="new-password" minlength="8" required>
+                            <button class="password-toggle" type="button" x-on:click="visible = ! visible" x-bind:class="{ 'is-visible': visible }" x-bind:aria-pressed="visible.toString()" x-bind:aria-label="visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'">
+                                <svg class="eye" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.3-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.3 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 3 18 18M10.6 5.6A9.5 9.5 0 0 1 12 5.5c6.2 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.2 6.2A15.4 15.4 0 0 0 2.5 12s3.3 6.5 9.5 6.5a9.5 9.5 0 0 0 4-.9"/></svg>
+                            </button>
+                        </div>
+                        @error('password')<small>{{ $message }}</small>@enderror
+                    </label>
+                    <label>Konfirmasi kata sandi baru
+                        <div class="profile-password-input-wrap profile-password-input-wrap-no-toggle">
+                            <input name="password_confirmation" type="password" autocomplete="new-password" minlength="8" required>
+                            <button class="password-toggle" type="button" x-on:click="visible = ! visible" x-bind:class="{ 'is-visible': visible }" x-bind:aria-pressed="visible.toString()" x-bind:aria-label="visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'">
+                                <svg class="eye" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.3-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.3 6.5-9.5 6.5S2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="eye-off" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 3 18 18M10.6 5.6A9.5 9.5 0 0 1 12 5.5c6.2 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3.1 3.8M6.2 6.2A15.4 15.4 0 0 0 2.5 12s3.3 6.5 9.5 6.5a9.5 9.5 0 0 0 4-.9"/></svg>
+                            </button>
+                        </div>
+                    </label>
                     <div><button class="button-primary" type="submit">Perbarui kata sandi</button></div>
                 </form>
             </section>

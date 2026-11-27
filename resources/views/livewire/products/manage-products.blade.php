@@ -1,15 +1,15 @@
-<div class="space-y-5">
+<div class="products-livewire">
     @if (session('status'))<div class="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-800">{{ session('status') }}</div>@endif
-    <div class="catalog-panel">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-            <div><h2 class="text-base font-semibold text-neutral-900">Katalog barang</h2><p class="mt-1 text-xs text-neutral-500">Data barang, satuan, harga, dan spesifikasi per kategori.</p></div>
-            <button class="button-primary" wire:click="create" type="button">+ Barang baru</button>
+    <div class="catalog-panel product-directory-panel">
+        <div class="product-directory-heading">
+            <div><h2>Katalog barang</h2><p>Data barang, satuan, harga, dan spesifikasi per kategori.</p></div>
+            <button class="button-primary product-add-button" wire:click="create" type="button"><span aria-hidden="true">+</span> Barang baru</button>
         </div>
-        <div class="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <div class="product-directory-filters">
             <input class="catalog-input" wire:model.live.debounce.300ms="search" type="search" placeholder="Cari nama atau kode barang...">
             <select class="catalog-input" wire:model.live="categoryFilter"><option value="">Semua kategori</option>@foreach($categories as $category)<option value="{{ $category->id }}">{{ $category->name }}</option>@endforeach</select>
         </div>
-        <div class="mt-5 overflow-x-auto"><table class="catalog-table"><thead><tr><th>Barang</th><th>Kategori</th><th>Harga</th><th>Satuan</th><th>Stok</th><th>Status</th><th class="text-right">Tindakan</th></tr></thead><tbody>
+        <div class="product-table-wrap"><table class="catalog-table"><thead><tr><th>Barang</th><th>Kategori</th><th>Harga</th><th>Satuan</th><th>Stok</th><th>Status</th><th class="text-right">Tindakan</th></tr></thead><tbody>
             @forelse ($products as $product)
                 <tr wire:key="product-{{ $product->id }}">
                     <td><div class="flex items-start gap-3"><img class="product-thumb" src="{{ $product->image_path ? asset('storage/'.$product->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $product->name }}" loading="lazy" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'"><div><div class="font-medium text-neutral-900">{{ $product->name }}</div><div class="mt-1 text-xs text-neutral-500">{{ $product->sku }}</div>@if($product->brand)<div class="mt-1 text-xs text-neutral-500">{{ $product->brand->name }}</div>@endif

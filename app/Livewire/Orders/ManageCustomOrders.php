@@ -2,14 +2,18 @@
 
 namespace App\Livewire\Orders;
 
+use App\Models\Category;
 use App\Models\CustomOrder;
 use App\Models\CustomOrderItem;
 use App\Models\CustomOrderPayment;
 use App\Models\CustomOrderStatusHistory;
 use App\Models\InventoryLevel;
 use App\Models\Product;
+use App\Models\ProductSpecification;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\StockMovement;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -35,6 +39,16 @@ class ManageCustomOrders extends Component
     public ?int $productId = null;
 
     public string $specifications = '';
+
+    /** @var array<string, string> */
+    public array $specificationInputs = [];
+
+    /** @var array<string, string> */
+    public array $customSpecificationInputs = [];
+
+    public string $sizePresetId = '';
+
+    public string $diameterPresetId = '';
 
     public string $diameter = '';
 
@@ -93,7 +107,126 @@ class ManageCustomOrders extends Component
         $this->resetPage();
     }
 
-    public function addOrderItem(): void
+    public function updatedProductId(): void
+    {
+        $this->reset(['specifications', 'diameter', 'shape', 'estimatedWeight', 'agreedPrice', 'sizePresetId', 'diameterPresetId']);
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
+        $this->quantity = '1';
+        $this->priceBasis = 'unit';
+
+        if ($this->productId === null) {
+            return;
+        }
+
+        $product = Product::query()->with(['category.specifications'])->find($this->productId);
+
+        if ($product === null) {
+            return;
+        }
+
+        $usesDiameterPrices = $this->hasConfiguredDiameterPrices($product->category);
+        $this->priceBasis = $product->pricing_method === 'weight' || $usesDiameterPrices ? 'weight' : 'unit';
+        $this->agreedPrice = (string) $product->selling_price;
+    }
+
+    public function updatedSpecificationInputs(): void
+    {
+        $this->syncAgreedPriceFromSpecifications();
+    }
+
+    public function updatedCustomSpecificationInputs(): void
+    {
+        $this->syncAgreedPriceFromSpecifications();
+    }
+
+    public function selectSizePreset(string $sizePresetId): void
+    {
+        $selectedDiameter = $this->specificationInputs['diameter_besi'] ?? '';
+        $this->sizePresetId = $sizePresetId;
+        $this->resetValidation('sizePresetId');
+        $this->specifications = '';
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
+
+        if ($this->productId === null || $sizePresetId === '') {
+            return;
+        }
+
+        $product = Product::query()->with('category.specifications')->findOrFail($this->productId);
+
+        if ($sizePresetId === '__custom__') {
+            $this->specificationInputs = $product->category->specifications
+                ->whereIn('key', ['bentuk', 'panjang', 'lebar', 'diameter_besi'])
+                ->mapWithKeys(fn (ProductSpecification $specification): array => [$specification->key => '__custom__'])
+                ->all();
+
+            if ($selectedDiameter !== '') {
+                $this->specificationInputs['diameter_besi'] = $selectedDiameter;
+            }
+
+            $this->syncAgreedPriceFromSpecifications();
+
+            return;
+        }
+
+        if (! str_starts_with($sizePresetId, 'dimension:')) {
+            $this->addError('sizePresetId', 'Pilihan ukuran tidak valid.');
+
+            return;
+        }
+
+        $index = filter_var(substr($sizePresetId, strlen('dimension:')), FILTER_VALIDATE_INT);
+        $dimensionSet = $index === false ? null : ($this->dimensionSetsForCategory($product->category)[$index] ?? null);
+
+        if ($dimensionSet === null) {
+            $this->sizePresetId = '';
+            $this->addError('sizePresetId', 'Ukuran ini sudah tidak tersedia.');
+
+            return;
+        }
+
+        $fieldByKey = ['bentuk' => 'shape', 'panjang' => 'length', 'lebar' => 'width'];
+        $this->specificationInputs = $product->category->specifications
+            ->mapWithKeys(fn (ProductSpecification $specification): array => [
+                $specification->key => array_key_exists($specification->key, $fieldByKey)
+                    ? (string) ($dimensionSet[$fieldByKey[$specification->key]] ?? '')
+                    : '',
+            ])
+            ->all();
+
+        if ($selectedDiameter !== '') {
+            $this->specificationInputs['diameter_besi'] = $selectedDiameter;
+        }
+
+        $this->syncAgreedPriceFromSpecifications();
+    }
+
+    public function selectDiameterPreset(string $diameterPresetId): void
+    {
+        if ($this->productId === null || ! str_starts_with($diameterPresetId, 'diameter:')) {
+            return;
+        }
+
+        $index = filter_var(substr($diameterPresetId, strlen('diameter:')), FILTER_VALIDATE_INT);
+        $product = Product::query()->with('category.specifications')->findOrFail($this->productId);
+        $dimensionSet = $index === false ? null : ($this->dimensionSetsForCategory($product->category)[$index] ?? null);
+
+        if ($dimensionSet === null || blank($dimensionSet['diameter'] ?? null)) {
+            $this->addError('diameterPresetId', 'Diameter ini sudah tidak tersedia.');
+
+            return;
+        }
+
+        $this->diameterPresetId = $diameterPresetId;
+        $this->specificationInputs['diameter_besi'] = (string) $dimensionSet['diameter'];
+        unset($this->customSpecificationInputs['diameter_besi']);
+        $this->priceBasis = 'weight';
+        $this->agreedPrice = is_numeric($dimensionSet['price'] ?? null) ? (string) $dimensionSet['price'] : '';
+        $this->resetValidation('diameterPresetId');
+    }
+
+    private function appendOrderItem(): void
     {
         $validated = $this->validate([
             'productId' => ['required', 'integer', 'exists:products,id'],
@@ -102,26 +235,94 @@ class ManageCustomOrders extends Component
             'priceBasis' => ['required', Rule::in(['weight', 'unit', 'fixed'])],
             'agreedPrice' => ['nullable', 'numeric', 'min:0', 'max:9999999999999.99'],
             'specifications' => ['nullable', 'string', 'max:1000'],
+            'specificationInputs' => ['array', 'max:30'],
+            'specificationInputs.*' => ['string', 'max:500'],
+            'customSpecificationInputs' => ['array', 'max:30'],
+            'customSpecificationInputs.*' => ['string', 'max:500'],
+            'sizePresetId' => ['nullable', 'string', 'max:40'],
+            'diameterPresetId' => ['nullable', 'string', 'max:40'],
             'diameter' => ['nullable', 'string', 'max:80'],
             'shape' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $product = Product::query()->with('unit')->where('is_active', true)->findOrFail($validated['productId']);
-        $weight = filled($validated['estimatedWeight']) ? (float) $validated['estimatedWeight'] : null;
-        $price = filled($validated['agreedPrice']) ? (float) $validated['agreedPrice'] : null;
+        $product = Product::query()->with(['unit', 'category.specifications', 'variants'])->where('is_active', true)->findOrFail($validated['productId']);
+        $specificationData = $this->normalizeOrderSpecifications($product->category->specifications);
+        $dimensionSets = $this->dimensionSetsForCategory($product->category);
+        $usesDiameterPrices = $this->hasConfiguredDiameterPrices($product->category);
 
-        if ($validated['priceBasis'] === 'weight' && $price !== null && $weight === null) {
+        if ($this->hasConfiguredSizeOptions($product->category) && ! str_starts_with($this->sizePresetId, 'dimension:') && $this->sizePresetId !== '__custom__') {
+            throw ValidationException::withMessages(['sizePresetId' => 'Pilih ukuran barang terlebih dahulu.']);
+        }
+
+        if (str_starts_with($this->sizePresetId, 'dimension:')) {
+            $index = filter_var(substr($this->sizePresetId, strlen('dimension:')), FILTER_VALIDATE_INT);
+            $dimensionSet = $index === false ? null : ($dimensionSets[$index] ?? null);
+
+            if ($dimensionSet === null) {
+                throw ValidationException::withMessages(['sizePresetId' => 'Pilih ukuran yang masih tersedia.']);
+            }
+
+            foreach (['bentuk' => 'shape', 'panjang' => 'length', 'lebar' => 'width'] as $key => $field) {
+                if (trim($specificationData['values'][$key] ?? '') !== trim($dimensionSet[$field])) {
+                    throw ValidationException::withMessages(['sizePresetId' => 'Pilihan ukuran berubah. Pilih ukuran dari daftar kembali.']);
+                }
+            }
+        }
+
+        if ($usesDiameterPrices && blank($specificationData['values']['diameter_besi'] ?? null)) {
+            throw ValidationException::withMessages(['diameterPresetId' => 'Pilih diameter besi terlebih dahulu.']);
+        }
+
+        foreach ($product->category->specifications as $specification) {
+            if ($specification->is_required
+                && ! in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true)
+                && blank($specificationData['values'][$specification->key] ?? null)) {
+                throw ValidationException::withMessages(['specificationInputs.'.$specification->key => 'Spesifikasi '.$specification->name.' wajib dipilih.']);
+            }
+        }
+
+        $matchedVariant = $this->findMatchingOrderVariant($product->variants, $specificationData['values']);
+        $price = $matchedVariant !== null ? (float) $matchedVariant->selling_price : (float) $product->selling_price;
+        $priceBasis = $product->pricing_method === 'weight' || $usesDiameterPrices ? 'weight' : $validated['priceBasis'];
+
+        if ($usesDiameterPrices) {
+            $dimensionSet = collect($dimensionSets)->first(fn (array $set): bool => mb_strtolower(trim((string) ($set['diameter'] ?? ''))) === mb_strtolower(trim($specificationData['values']['diameter_besi'] ?? '')));
+
+            if (! is_numeric($dimensionSet['price'] ?? null) || (float) $dimensionSet['price'] <= 0) {
+                throw ValidationException::withMessages(['diameterPresetId' => 'Harga untuk diameter ini belum tersedia. Lengkapi harga per kg di Atribut Kategori.']);
+            }
+
+            $price = (float) $dimensionSet['price'];
+        } elseif ($matchedVariant !== null) {
+            $price = (float) $matchedVariant->selling_price;
+        } elseif ($product->variants->where('is_active', true)->isNotEmpty() && $specificationData['custom_keys'] === []) {
+            throw ValidationException::withMessages(['specificationInputs' => 'Harga variasi untuk pilihan ini belum diatur.']);
+        } elseif (filled($validated['agreedPrice'])) {
+            $price = (float) $validated['agreedPrice'];
+        }
+
+        $weight = filled($validated['estimatedWeight']) ? (float) $validated['estimatedWeight'] : null;
+
+        if ($priceBasis === 'weight' && $weight === null) {
             $this->addError('estimatedWeight', 'Masukkan berat estimasi untuk menghitung nilai pesanan per kilogram.');
 
             return;
         }
 
-        $lineTotal = match ($validated['priceBasis']) {
-            'weight' => $weight !== null && $price !== null ? round($weight * $price, 2) : 0,
-            'unit' => $price !== null ? round((float) $validated['quantity'] * $price, 2) : 0,
-            default => $price ?? 0,
+        $lineTotal = match ($priceBasis) {
+            'weight' => round((float) $weight * $price, 2),
+            'unit' => round((float) $validated['quantity'] * $price, 2),
+            default => $price,
         };
+
+        $labels = $specificationData['labels'];
+        if (filled($validated['specifications'])) {
+            $labels['Rincian'] = trim($validated['specifications']);
+        }
+
+        $diameter = $specificationData['values']['diameter_besi'] ?? null;
+        $shape = $specificationData['values']['bentuk'] ?? null;
 
         $this->orderItems[] = [
             'key' => (string) Str::uuid(),
@@ -132,16 +333,18 @@ class ManageCustomOrders extends Component
             'stock_unit' => $product->pricing_method === 'weight' ? 'kg' : $product->unit->abbreviation,
             'estimated_weight' => $weight,
             'actual_weight' => null,
-            'price_basis' => $validated['priceBasis'],
+            'price_basis' => $priceBasis,
             'agreed_price' => $price,
             'total_price' => $lineTotal,
-            'specifications' => filled($validated['specifications']) ? ['Rincian' => trim($validated['specifications'])] : [],
-            'diameter' => $validated['diameter'] ?: null,
-            'shape' => $validated['shape'] ?: null,
+            'specifications' => $labels,
+            'diameter' => $diameter,
+            'shape' => $shape,
             'notes' => $validated['notes'] ?: null,
         ];
 
-        $this->reset(['productId', 'specifications', 'diameter', 'shape', 'estimatedWeight', 'agreedPrice', 'notes']);
+        $this->reset(['productId', 'specifications', 'diameter', 'shape', 'estimatedWeight', 'agreedPrice', 'notes', 'sizePresetId', 'diameterPresetId']);
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
         $this->quantity = '1';
         $this->priceBasis = 'unit';
         $this->resetValidation();
@@ -154,8 +357,17 @@ class ManageCustomOrders extends Component
 
     public function createOrder(): void
     {
+        if ($this->productId !== null) {
+            $existingItemCount = count($this->orderItems);
+            $this->appendOrderItem();
+
+            if (count($this->orderItems) === $existingItemCount) {
+                return;
+            }
+        }
+
         if ($this->orderItems === []) {
-            $this->addError('orderItems', 'Tambahkan minimal satu barang ke pesanan.');
+            $this->addError('orderItems', 'Pilih barang yang akan dimasukkan ke pesanan.');
 
             return;
         }
@@ -574,8 +786,14 @@ class ManageCustomOrders extends Component
 
     public function render(): View
     {
+        $selectedProduct = $this->productId
+            ? Product::query()->with(['unit', 'category.specifications', 'variants'])->where('is_active', true)->find($this->productId)
+            : null;
+
         return view('livewire.orders.manage-custom-orders', [
             'products' => Product::query()->with('unit')->where('is_active', true)->orderBy('name')->get(),
+            'selectedProduct' => $selectedProduct,
+            'dimensionSets' => $selectedProduct ? $this->dimensionSetsForCategory($selectedProduct->category) : [],
             'orders' => CustomOrder::query()
                 ->with(['creator', 'items', 'statusHistories.user', 'stockMovements.user'])
                 ->when($this->search, fn ($query) => $query->where(fn ($query) => $query
@@ -587,6 +805,126 @@ class ManageCustomOrders extends Component
                 ->latest('id')
                 ->paginate(12),
         ]);
+    }
+
+    /**
+     * @param  Collection<int, ProductSpecification>  $specifications
+     * @return array{values: array<string, string>, custom_keys: array<int, string>, labels: array<string, string>}
+     */
+    private function normalizeOrderSpecifications(Collection $specifications): array
+    {
+        $values = [];
+        $customKeys = [];
+        $labels = [];
+
+        foreach ($specifications as $specification) {
+            $selected = $this->specificationInputs[$specification->key] ?? '';
+            $isCustom = $selected === '__custom__';
+            $value = trim($isCustom
+                ? ($this->customSpecificationInputs[$specification->key] ?? '')
+                : $selected);
+
+            if ($isCustom) {
+                $customKeys[] = $specification->key;
+            }
+
+            if ($value !== '') {
+                $values[$specification->key] = $value;
+                $labels[$specification->name] = $value;
+            }
+        }
+
+        return ['values' => $values, 'custom_keys' => $customKeys, 'labels' => $labels];
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Collection<int, ProductVariant> $variants
+     * @param  array<string, string>  $specifications
+     */
+    private function findMatchingOrderVariant(Collection $variants, array $specifications): ?ProductVariant
+    {
+        return $variants->first(function (ProductVariant $variant) use ($specifications): bool {
+            $variantSpecifications = collect($variant->specifications)->sortKeys()->all();
+
+            return $variant->is_active
+                && $variantSpecifications !== []
+                && collect($specifications)->only(array_keys($variantSpecifications))->sortKeys()->all() === $variantSpecifications;
+        });
+    }
+
+    /** @return array<int, array{shape: string, length: string, width: string, diameter: string, price: float|null}> */
+    private function dimensionSetsForCategory(Category $category): array
+    {
+        if (is_array($category->dimension_sets) && $category->dimension_sets !== []) {
+            return array_map(fn (array $set): array => [
+                'shape' => (string) ($set['shape'] ?? ''),
+                'length' => (string) ($set['length'] ?? ''),
+                'width' => (string) ($set['width'] ?? ''),
+                'diameter' => (string) ($set['diameter'] ?? ''),
+                'price' => ($set['type'] ?? null) === 'size' || ! is_numeric($set['price'] ?? null) ? null : (float) $set['price'],
+            ], $category->dimension_sets);
+        }
+
+        $fieldByKey = ['shape' => 'bentuk', 'length' => 'panjang', 'width' => 'lebar', 'diameter' => 'diameter_besi'];
+        $specifications = $category->specifications->keyBy('key');
+        $rowCount = max([0, ...array_map(
+            fn (string $key): int => count($specifications->get($key)?->options ?? []),
+            array_values($fieldByKey),
+        )]);
+        $dimensionSets = [];
+
+        for ($index = 0; $index < $rowCount; $index++) {
+            $dimensionSet = [];
+
+            foreach ($fieldByKey as $field => $key) {
+                $dimensionSet[$field] = (string) ($specifications->get($key)?->options[$index] ?? '');
+            }
+
+            if (collect($dimensionSet)->contains(fn (string $value): bool => filled($value))) {
+                $dimensionSet['price'] = null;
+                $dimensionSets[] = $dimensionSet;
+            }
+        }
+
+        return $dimensionSets;
+    }
+
+    private function hasConfiguredDiameterPrices(Category $category): bool
+    {
+        return collect($this->dimensionSetsForCategory($category))->contains(fn (array $set): bool => filled($set['diameter']));
+    }
+
+    private function hasConfiguredSizeOptions(Category $category): bool
+    {
+        return collect($this->dimensionSetsForCategory($category))->contains(fn (array $set): bool => filled($set['shape']) || filled($set['length']) || filled($set['width']));
+    }
+
+    private function syncAgreedPriceFromSpecifications(): void
+    {
+        if ($this->productId === null) {
+            return;
+        }
+
+        $product = Product::query()->with(['category.specifications', 'variants'])->find($this->productId);
+
+        if ($product === null) {
+            return;
+        }
+
+        $specificationData = $this->normalizeOrderSpecifications($product->category->specifications);
+
+        if ($this->hasConfiguredDiameterPrices($product->category)) {
+            $diameter = $specificationData['values']['diameter_besi'] ?? '';
+            $dimensionSet = collect($this->dimensionSetsForCategory($product->category))->first(fn (array $set): bool => $diameter !== ''
+                && mb_strtolower(trim($set['diameter'])) === mb_strtolower(trim($diameter)));
+
+            $this->priceBasis = 'weight';
+            $this->agreedPrice = is_numeric($dimensionSet['price'] ?? null) ? (string) $dimensionSet['price'] : '';
+
+            return;
+        }
+
+        $variant = $this->findMatchingOrderVariant($product->variants, $specificationData['values']);
+        $this->agreedPrice = (string) ($variant?->selling_price ?? $product->selling_price);
     }
 
     private function saveOrderItemDetails(int $orderId, string $requiredStatus): void
@@ -737,8 +1075,10 @@ class ManageCustomOrders extends Component
     {
         $this->reset([
             'customerName', 'customerPhone', 'productId', 'specifications', 'diameter', 'shape',
-            'estimatedWeight', 'agreedPrice', 'estimatedCompletionDate', 'notes', 'orderItems',
+            'estimatedWeight', 'agreedPrice', 'estimatedCompletionDate', 'notes', 'orderItems', 'sizePresetId', 'diameterPresetId',
         ]);
+        $this->specificationInputs = [];
+        $this->customSpecificationInputs = [];
         $this->quantity = '1';
         $this->priceBasis = 'unit';
         $this->orderDate = now()->timezone('Asia/Jakarta')->toDateString();

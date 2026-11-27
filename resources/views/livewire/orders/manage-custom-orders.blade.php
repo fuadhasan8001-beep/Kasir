@@ -6,15 +6,119 @@
             <form class="catalog-form" wire:submit="createOrder">
                 <div class="pos-input-grid"><label>Nama pelanggan<input wire:model="customerName" maxlength="160">@error('customerName')<small>{{ $message }}</small>@enderror</label><label>Nomor telepon (opsional)<input type="tel" wire:model="customerPhone" maxlength="40" placeholder="Boleh dikosongkan"></label></div>
                 <div class="pos-input-grid"><label>Tanggal pesanan<input type="date" wire:model="orderDate">@error('orderDate')<small>{{ $message }}</small>@enderror</label><label>Jadwal pengambilan<input type="date" wire:model="estimatedCompletionDate">@error('estimatedCompletionDate')<small>{{ $message }}</small>@enderror</label></div>
-                <label>Barang<select wire:model="productId"><option value="">Pilih barang</option>@foreach($products as $product)<option value="{{ $product->id }}">{{ $product->name }} · {{ $product->sku }}</option>@endforeach</select>@error('productId')<small>{{ $message }}</small>@enderror</label>
-                <div class="pos-input-grid"><label>Jumlah<input type="number" min="0.001" step="0.001" wire:model="quantity">@error('quantity')<small>{{ $message }}</small>@enderror</label><label>Berat estimasi (kg)<input type="number" min="0.001" step="0.001" wire:model="estimatedWeight"></label></div>
-                <div class="pos-input-grid"><label>Dasar harga<select wire:model.live="priceBasis"><option value="unit">Per satuan</option><option value="weight">Per kg</option><option value="fixed">Harga total tetap</option></select></label><label>{{ $priceBasis === 'weight' ? 'Harga per kg' : ($priceBasis === 'unit' ? 'Harga per satuan' : 'Total harga') }} (Rp)<input type="number" min="0" step="1" wire:model="agreedPrice">@error('agreedPrice')<small>{{ $message }}</small>@enderror</label></div>
-                <div class="pos-input-grid"><label>Diameter<input wire:model="diameter" placeholder="Mis. 10 mm"></label><label>Bentuk<input wire:model="shape" placeholder="Mis. kotak"></label></div>
-                <label>Spesifikasi<textarea rows="2" wire:model="specifications" placeholder="Panjang, lebar, atau rincian custom"></textarea></label>
-                <label>Catatan<textarea rows="2" wire:model="notes"></textarea></label>
-                <button class="button-secondary" type="button" wire:click="addOrderItem">Tambah barang ke pesanan</button>
+                <label>Barang<select wire:model.live="productId"><option value="">Pilih barang</option>@foreach($products as $product)<option value="{{ $product->id }}">{{ $product->name }} · {{ $product->sku }}</option>@endforeach</select>@error('productId')<small>{{ $message }}</small>@enderror</label>
+                @if($selectedProduct)
+                    @php
+                        $usesDiameterPrices = collect($dimensionSets)->contains(fn ($set) => filled($set['diameter'] ?? null));
+                        $hasSizeOptions = collect($dimensionSets)->contains(fn ($set) => filled($set['shape'] ?? null) || filled($set['length'] ?? null) || filled($set['width'] ?? null));
+                        $selectedOrderSpecifications = [];
+                        foreach ($selectedProduct->category->specifications as $specification) {
+                            $selection = $specificationInputs[$specification->key] ?? '';
+                            $value = $selection === '__custom__' ? ($customSpecificationInputs[$specification->key] ?? '') : $selection;
+                            if (filled($value)) {
+                                $selectedOrderSpecifications[$specification->name] = $value;
+                            }
+                        }
+                        $estimatedAmount = $priceBasis === 'weight' ? (float) ($estimatedWeight ?: 0) : (float) ($quantity ?: 0);
+                        $estimatedTotal = $estimatedAmount * (float) ($agreedPrice ?: 0);
+                    @endphp
+                    <div class="pos-selected-product">
+                        <img src="{{ $selectedProduct->image_path ? asset('storage/'.$selectedProduct->image_path) : asset('images/product-placeholder-steel.svg') }}" alt="Foto {{ $selectedProduct->name }}" onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder-steel.svg') }}'">
+                        <div><strong>{{ $selectedProduct->name }}</strong><small>{{ $selectedProduct->sku }} · {{ $selectedProduct->category->name }}</small>@if($selectedProduct->description)<small>{{ $selectedProduct->description }}</small>@endif<small>Ukuran dan harga mengikuti data kategori barang.</small></div>
+                    </div>
+                    @if($selectedProduct->category->specifications->isNotEmpty())
+                        <section class="pos-size-picker" aria-labelledby="order-size-picker-title">
+                            <div class="pos-size-picker-heading"><strong id="order-size-picker-title">Pilih ukuran atau spesifikasi barang</strong><small>Daftar dari kategori {{ $selectedProduct->category->name }}</small></div>
+                            @if($dimensionSets !== [])
+                                @if($hasSizeOptions)
+                                    <div class="pos-spec-option-group"><span class="pos-spec-option-label">Ukuran</span><div class="pos-spec-options" role="group" aria-label="Pilihan ukuran barang">
+                                        @foreach($dimensionSets as $optionIndex => $dimensionSet)
+                                            @if(filled($dimensionSet['shape'] ?? null) || filled($dimensionSet['length'] ?? null) || filled($dimensionSet['width'] ?? null))
+                                                @php($dimensionLabel = collect([filled($dimensionSet['shape'] ?? '') ? $dimensionSet['shape'] : null, filled($dimensionSet['length'] ?? '') ? 'P '.$dimensionSet['length'] : null, filled($dimensionSet['width'] ?? '') ? 'L '.$dimensionSet['width'] : null])->filter()->implode(', '))
+                                                <button type="button" wire:key="order-size-{{ $optionIndex }}" class="pos-spec-option {{ $sizePresetId === 'dimension:'.$optionIndex ? 'active' : '' }}" wire:click="selectSizePreset('dimension:{{ $optionIndex }}')">{{ $dimensionLabel }}</button>
+                                            @endif
+                                        @endforeach
+                                        <button type="button" class="pos-spec-option {{ $sizePresetId === '__custom__' ? 'active' : '' }}" wire:click="selectSizePreset('__custom__')">Custom</button>
+                                    </div></div>
+                                @endif
+                                @if($usesDiameterPrices)
+                                    <div class="pos-spec-option-group"><span class="pos-spec-option-label">Diameter besi · harga per kg</span><div class="pos-spec-options" role="group" aria-label="Pilihan diameter besi">
+                                        @php($listedDiameters = [])
+                                        @foreach($dimensionSets as $diameterIndex => $dimensionSet)
+                                            @if(filled($dimensionSet['diameter'] ?? null) && !in_array(mb_strtolower($dimensionSet['diameter']), $listedDiameters, true))
+                                                @php($listedDiameters[] = mb_strtolower($dimensionSet['diameter']))
+                                                <button type="button" wire:key="order-diameter-{{ $diameterIndex }}" class="pos-spec-option {{ ($specificationInputs['diameter_besi'] ?? '') === $dimensionSet['diameter'] ? 'active' : '' }}" wire:click="selectDiameterPreset('diameter:{{ $diameterIndex }}')">{{ $dimensionSet['diameter'] }} · @rupiah($dimensionSet['price'] ?? 0)/kg</button>
+                                            @endif
+                                        @endforeach
+                                    </div>@error('diameterPresetId')<small>{{ $message }}</small>@enderror</div>
+                                @endif
+                            @endif
+                            @foreach($selectedProduct->category->specifications as $specification)
+                                @if($dimensionSets !== [] && in_array($specification->key, ['bentuk', 'panjang', 'lebar', 'diameter_besi'], true))
+                                    @if($sizePresetId === '__custom__' && in_array($specification->key, ['bentuk', 'panjang', 'lebar'], true))
+                                        <label>{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif<input type="{{ in_array($specification->data_type, ['number', 'integer'], true) ? 'number' : 'text' }}" @if($specification->data_type === 'number')step="any"@elseif($specification->data_type === 'integer')step="1"@endif wire:model.live.debounce.250ms="customSpecificationInputs.{{ $specification->key }}" placeholder="Masukkan {{ strtolower($specification->name) }} custom"></label>
+                                    @endif
+                                    @continue
+                                @endif
+                                @php($specificationSelection = $specificationInputs[$specification->key] ?? '')
+                                <div class="pos-spec-option-group" wire:key="order-specification-{{ $specification->id }}"><span class="pos-spec-option-label">{{ $specification->name }}@if($specification->measurement_unit) ({{ $specification->measurement_unit }})@endif @if($specification->is_required)<span aria-hidden="true">*</span>@endif</span>
+                                    @if(filled($specification->options))
+                                        <div class="pos-spec-options" role="group" aria-label="{{ $specification->name }}">
+                                            @foreach($specification->options as $optionIndex => $option)
+                                                <button type="button" wire:key="order-spec-option-{{ $specification->id }}-{{ $optionIndex }}" class="pos-spec-option {{ $specificationSelection === (string) $option ? 'active' : '' }}" wire:click="$set('specificationInputs.{{ $specification->key }}', @js((string) $option))">{{ $option }}</button>
+                                            @endforeach
+                                            @if($specification->allow_custom)<button type="button" class="pos-spec-option {{ $specificationSelection === '__custom__' ? 'active' : '' }}" wire:click="$set('specificationInputs.{{ $specification->key }}', '__custom__')">Custom</button>@endif
+                                        </div>
+                                    @elseif($specification->data_type === 'boolean')
+                                        <select wire:model.live="specificationInputs.{{ $specification->key }}"><option value="">Pilih</option><option value="1">Ya</option><option value="0">Tidak</option></select>
+                                    @else
+                                        <input type="{{ in_array($specification->data_type, ['number', 'integer'], true) ? 'number' : 'text' }}" @if($specification->data_type === 'number')step="any"@elseif($specification->data_type === 'integer')step="1"@endif wire:model.live.debounce.250ms="specificationInputs.{{ $specification->key }}" placeholder="Isi {{ strtolower($specification->name) }}">
+                                    @endif
+                                    @if($specificationSelection === '__custom__')<input type="{{ in_array($specification->data_type, ['number', 'integer'], true) ? 'number' : 'text' }}" @if($specification->data_type === 'number')step="any"@elseif($specification->data_type === 'integer')step="1"@endif wire:model.live.debounce.250ms="customSpecificationInputs.{{ $specification->key }}" placeholder="Masukkan {{ strtolower($specification->name) }} custom">@endif
+                                    @error('specificationInputs.'.$specification->key)<small>{{ $message }}</small>@enderror
+                                </div>
+                            @endforeach
+                        </section>
+                    @endif
+                    @error('sizePresetId')<small class="catalog-error">{{ $message }}</small>@enderror
+                    <div class="pos-input-grid">
+                        @if($priceBasis !== 'weight')<label>Jumlah {{ $selectedProduct->unit->abbreviation }}<input type="number" min="0.001" step="0.001" wire:model.live="quantity">@error('quantity')<small>{{ $message }}</small>@enderror</label>@else<label>Berat estimasi (kg)<input type="number" min="0.001" step="0.001" wire:model.live="estimatedWeight">@error('estimatedWeight')<small>{{ $message }}</small>@enderror</label>@endif
+                        @if($priceBasis === 'weight' && $selectedProduct->pricing_method !== 'weight')<label>Jumlah {{ $selectedProduct->unit->abbreviation }}<input type="number" min="0.001" step="0.001" wire:model.live="quantity">@error('quantity')<small>{{ $message }}</small>@enderror</label>@endif
+                    </div>
+                    @if(! $usesDiameterPrices && $selectedProduct->pricing_method !== 'weight')
+                        <div class="pos-input-grid"><label>Dasar harga<select wire:model.live="priceBasis"><option value="unit">Per satuan</option><option value="weight">Per kg</option><option value="fixed">Harga total tetap</option></select></label><label>{{ $priceBasis === 'weight' ? 'Harga per kg' : ($priceBasis === 'unit' ? 'Harga per satuan' : 'Total harga') }} (Rp)<input type="number" min="0" step="1" wire:model.live="agreedPrice">@error('agreedPrice')<small>{{ $message }}</small>@enderror</label></div>
+                    @elseif(! $usesDiameterPrices)
+                        <label>Harga per kg (Rp)<input type="number" min="0" step="1" wire:model.live="agreedPrice">@error('agreedPrice')<small>{{ $message }}</small>@enderror</label>
+                    @else
+                        <label>Harga per kg (Rp)<input type="number" min="0" step="1" wire:model.live="agreedPrice" readonly>@error('agreedPrice')<small>{{ $message }}</small>@enderror</label>
+                    @endif
+                    @if($selectedOrderSpecifications)<div class="pos-estimated-total"><span>Spesifikasi terpilih</span><strong>{{ collect($selectedOrderSpecifications)->map(fn ($value, $key) => $key.': '.$value)->implode(' · ') }}</strong></div>@endif
+                    @if($estimatedAmount > 0 && (float) $agreedPrice > 0)<div class="pos-estimated-total"><span>Estimasi nilai pesanan</span><strong>@rupiah($estimatedTotal)</strong></div>@endif
+                @endif
                 @error('orderItems')<small class="catalog-error">{{ $message }}</small>@enderror
-                @if($orderItems)<div class="order-draft-list"><strong>Barang pesanan</strong>@foreach($orderItems as $item)<div class="order-draft-item" wire:key="draft-{{ $item['key'] }}"><span>{{ $item['product_name'] }} · @quantity($item['quantity']) {{ $item['stock_unit'] }}<small>Nilai @rupiah($item['total_price'])</small></span><button type="button" class="text-button text-danger" wire:click="removeOrderItem('{{ $item['key'] }}')">Hapus</button></div>@endforeach</div>@endif
+                @if($orderItems)
+                    <div class="order-draft-list">
+                        <strong>Barang pesanan</strong>
+                        @foreach($orderItems as $item)
+                            <div class="order-draft-item" wire:key="draft-{{ $item['key'] }}">
+                                <span>
+                                    {{ $item['product_name'] }} · @quantity($item['quantity']) {{ $item['stock_unit'] }}
+                                    @if($item['estimated_weight']) · @quantity($item['estimated_weight']) kg @endif
+                                    <small>
+                                        @if($item['price_basis'] === 'weight')
+                                            @rupiah($item['agreed_price'])/kg ·
+                                        @endif
+                                        Nilai @rupiah($item['total_price'])
+                                    </small>
+                                    @if($item['specifications'])
+                                        <small>{{ collect($item['specifications'])->map(fn ($value, $key) => $key.': '.$value)->implode(' · ') }}</small>
+                                    @endif
+                                </span>
+                                <button type="button" class="text-button text-danger" wire:click="removeOrderItem('{{ $item['key'] }}')">Hapus</button>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
                 <button class="button-primary" type="submit" wire:loading.attr="disabled" wire:target="createOrder">Simpan pesanan</button>
             </form>
         </section>
